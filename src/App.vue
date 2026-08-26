@@ -9,6 +9,7 @@ import RadarCard from './components/RadarCard.vue'
 import DayCard from './components/DayCard.vue'
 
 const settingsOpen = ref(false)
+const contact = ['contact', 'pleutpas.fr'].join('@')
 const updatedStale = computed(() => fetchedAt.value !== null && nowTick.value - fetchedAt.value > 10 * 60 * 1000)
 const updatedText = computed(() => fetchedAt.value === null
   ? ''
@@ -36,8 +37,8 @@ const updatedText = computed(() => fetchedAt.value === null
   </main>
   <footer class="mx-auto max-w-[640px] px-3.5 pb-7 text-center text-xs text-dim desk:max-w-[860px]">
     Prévisions <a class="underline" href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>,
-    pluie dans l'heure <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>,
-    radar <a class="underline" href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>.
-    Position : {{ place.name }}.
+    pluie dans l'heure et prévision AROME <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>,
+    radar passé <a class="underline" href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>.
+    <span class="block pt-1">Position : {{ place.name }}. Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.</span>
   </footer>
 </template>
