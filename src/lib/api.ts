@@ -97,6 +97,14 @@ export async function sampleRadarAt(host: string, path: string, lat: number, lon
   return false
 }
 
+export async function reverseGeocodeName(lat: number, lon: number): Promise<string | null> {
+  const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat
+    + '&longitude=' + lon + '&localityLanguage=fr')
+  if (!res.ok) throw new Error('reverse-geocode http ' + res.status)
+  const data = await res.json()
+  return data.city || data.locality || null
+}
+
 export async function searchPlaces(q: string): Promise<GeoResult[]> {
   const res = await fetch('https://geocoding-api.open-meteo.com/v1/search?name='
     + encodeURIComponent(q) + '&count=5&language=fr&format=json')

@@ -1,11 +1,34 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { place, setPlace, setTripMin, tripMin } from '../store'
-import { searchPlaces, type GeoResult } from '../lib/api'
+import { reverseGeocodeName, searchPlaces, type GeoResult } from '../lib/api'
 
 const query = ref('')
 const results = ref<GeoResult[]>([])
 const message = ref('')
+const geolocSupported = 'geolocation' in navigator
+const locating = ref(false)
+
+function locateMe(): void {
+  if (locating.value) return
+  locating.value = true
+  message.value = 'Localisation...'
+  navigator.geolocation.getCurrentPosition(async pos => {
+    const lat = Math.round(pos.coords.latitude * 1000) / 1000
+    const lon = Math.round(pos.coords.longitude * 1000) / 1000
+    let name: string | null = null
+    try { name = await reverseGeocodeName(lat, lon) } catch { /* nom facultatif */ }
+    locating.value = false
+    message.value = ''
+    results.value = []
+    setPlace({ name: name ?? 'Ma position', lat, lon })
+  }, err => {
+    locating.value = false
+    message.value = err.code === err.PERMISSION_DENIED
+      ? 'Géolocalisation refusée (autorise-la dans le navigateur, et il faut du HTTPS).'
+      : 'Position introuvable pour le moment.'
+  }, { timeout: 10000, maximumAge: 60000 })
+}
 
 function onTrip(e: Event): void {
   setTripMin(parseInt((e.target as HTMLInputElement).value, 10))
@@ -52,6 +75,11 @@ function pick(r: GeoResult): void {
       >
       <button class="flex-none cursor-pointer rounded-[10px] border border-line bg-panel2 px-3.5 py-2.5 text-sm" @click="search">Chercher</button>
     </div>
+    <button
+      v-if="geolocSupported"
+      class="mt-2 w-full cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line"
+      :disabled="locating" @click="locateMe"
+    >{{ locating ? 'Localisation...' : 'Utiliser ma position' }}</button>
     <div class="mt-2 flex flex-col gap-1.5">
       <button
         v-for="r in results" :key="r.latitude + '/' + r.longitude"
