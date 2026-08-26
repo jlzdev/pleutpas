@@ -37,16 +37,16 @@ export function fmtHM(t: number | Date): string {
   return new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
 }
 
-function daysuffix(tMs: number, nowMs: number): string {
+function fmtDayHM(tMs: number, nowMs: number): string {
   const t = new Date(tMs)
   const n = new Date(nowMs)
   const days = Math.round(
     (new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()
       - new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()) / 86400000,
   )
-  if (days <= 0) return ''
-  if (days === 1) return ' demain'
-  return ' ' + t.toLocaleDateString('fr-FR', { weekday: 'long' })
+  if (days <= 0) return fmtHM(tMs)
+  if (days === 1) return 'demain ' + fmtHM(tMs)
+  return t.toLocaleDateString('fr-FR', { weekday: 'long' }) + ' ' + fmtHM(tMs)
 }
 
 export function slotIndexNow(slots: Slot[], nowMs: number): number {
@@ -141,8 +141,8 @@ export function computeVerdict(
       big: 'OUI',
       sub: 'Prends ton vélo',
       detail: wetT < 0
-        ? 'Pas de pluie prévue jusqu\'à ' + fmtHM(slotsEndMs(slots)) + daysuffix(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
-        : 'Sec jusqu\'à ' + fmtHM(wetT) + daysuffix(wetT, nowMs) + ' environ.',
+        ? 'Pas de pluie prévue jusqu\'à ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
+        : 'Sec jusqu\'à ' + fmtDayHM(wetT, nowMs) + ' environ.',
     }
   }
   if (forecastDry) {
@@ -155,20 +155,20 @@ export function computeVerdict(
   }
   const rainingNow = wetAtMs(slots, mf, nowMs) === true || radarWetNow === true
   const wetT = firstWetMs(slots, mf, nowMs)
-  const sub = rainingNow || wetT < 0 ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtHM(wetT)
+  const sub = rainingNow || wetT < 0 ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtDayHM(wetT, nowMs)
   const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
   if (depMs < 0) {
     return {
       state: 'non',
       big: 'NON',
       sub,
-      detail: 'Pas de fenêtre sèche trouvée d\'ici ' + fmtHM(slotsEndMs(slots)) + daysuffix(slotsEndMs(slots), nowMs) + ' (fin des prévisions).',
+      detail: 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).',
     }
   }
   return {
     state: 'non',
     big: 'NON',
     sub,
-    detail: 'Prochain départ au sec : ' + fmtHM(depMs) + daysuffix(depMs, nowMs),
+    detail: 'Prochain départ au sec : ' + fmtDayHM(depMs, nowMs),
   }
 }

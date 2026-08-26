@@ -21,7 +21,7 @@ const updatedText = computed(() => fetchedAt.value === null
 <template>
   <header class="mx-auto flex max-w-[668px] items-center gap-2 px-3.5 pb-1 pt-3 desk:max-w-[888px] desk:pt-4">
     <h1 class="flex-1 text-xl font-bold">
-      Pleut pas ?
+      Je peux rouler ?
       <small class="block text-sm font-normal text-dim"><span class="font-semibold text-ink">{{ place.name }}</span>, vélo boulot</small>
     </h1>
     <button class="iconbtn" aria-label="Réglages" @click="settingsOpen = !settingsOpen">⚙&#xFE0E;</button>
