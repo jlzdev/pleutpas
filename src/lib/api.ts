@@ -16,6 +16,17 @@ export interface RadarMaps {
   frames: RadarFrame[]
 }
 
+export interface FutureFrame {
+  time: number
+  url: string
+}
+
+export interface FutureRain {
+  run: string
+  bounds: [[number, number], [number, number]]
+  frames: FutureFrame[]
+}
+
 export interface GeoResult {
   name: string
   latitude: number
@@ -64,6 +75,20 @@ export async function fetchRadarMaps(): Promise<RadarMaps> {
     ...(wm.radar.nowcast || []).map((f: { time: number; path: string }) => ({ ...f, type: 'fcst' as const })),
   ]
   return { host: wm.host, frames }
+}
+
+const DATA_BASE: string = import.meta.env.VITE_DATA_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/data'
+
+export async function fetchFutureRain(): Promise<FutureRain | null> {
+  const res = await fetch(DATA_BASE + '/manifest.json')
+  if (!res.ok) throw new Error('manifest frames http ' + res.status)
+  const m = await res.json()
+  if (!m.run || !m.bounds || !m.frames?.length) return null
+  return {
+    run: m.run,
+    bounds: m.bounds,
+    frames: m.frames.map((f: { time: number; file: string }) => ({ time: f.time, url: DATA_BASE + '/' + f.file })),
+  }
 }
 
 // echantillonne une image radar au-dessus du lieu (rayon ~2.5 km au zoom 7, grille max gratuite RainViewer)

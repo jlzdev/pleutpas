@@ -2,3 +2,7 @@ node_modules/
 dist/
 *.log
 NOTES.local.md
+.env.local
+CLAUDE.md
+.claude/
+out/

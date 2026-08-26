@@ -1,0 +1,36 @@
+name: Frames pluie AROME-PI
+
+on:
+  schedule:
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: data
+  cancel-in-progress: false
+
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run data
+        env:
+          MF_API_KEY: ${{ secrets.MF_API_KEY }}
+      - name: Publier la branche data
+        if: ${{ hashFiles('out/manifest.json') != '' }}
+        run: |
+          cd out
+          git init -q -b data
+          git add -A
+          git -c user.name=pleutpas-data -c user.email=163107032+jlzdev@users.noreply.github.com commit -q -m "frames $(date -u +%FT%TZ)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" data

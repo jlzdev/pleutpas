@@ -1,10 +1,12 @@
 import { computed, ref } from 'vue'
 import { BESANCON, type MfEntry, type Place, type Slot } from './lib/meteo'
 import {
+  fetchFutureRain,
   fetchRadarMaps,
   fetchRain,
   fetchWeather,
   sampleRadarAt,
+  type FutureRain,
   type OpenMeteoPayload,
   type RadarMaps,
 } from './lib/api'
@@ -42,6 +44,7 @@ export const fetchedAt = ref<number | null>(null)
 export const rainMF = ref<MfEntry[] | null>(null)
 export const radarWetNow = ref<boolean | null>(null)
 export const radarMaps = ref<RadarMaps | null>(null)
+export const futureRain = ref<FutureRain | null>(null)
 export const radarError = ref(false)
 export const refreshing = ref(false)
 export const nowTick = ref(Date.now())
@@ -84,6 +87,7 @@ export async function refresh(fromButton = false): Promise<void> {
   rainMF.value = r.status === 'fulfilled' ? r.value : null
   radarWetNow.value = null
   radarError.value = false
+  const futP = fetchFutureRain().catch(() => null)
   try {
     const maps = await fetchRadarMaps()
     radarMaps.value = maps
@@ -96,6 +100,8 @@ export async function refresh(fromButton = false): Promise<void> {
   } catch {
     radarError.value = true
   }
+  const fut = await futP
+  futureRain.value = fut && fut.frames.some(f => f.time * 1000 > Date.now()) ? fut : null
   nowTick.value = Date.now()
   refreshing.value = false
 }
@@ -129,4 +135,4 @@ export function initStore(): void {
 declare global {
   interface Window { __pp: Record<string, unknown> }
 }
-window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarWetNow, radarMaps, slots, nowTick, refresh, setPlace }
+window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarWetNow, radarMaps, futureRain, slots, nowTick, refresh, setPlace }

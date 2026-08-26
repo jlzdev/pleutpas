@@ -1,8 +1,15 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { place, radarError, radarMaps, recenterTick } from '../store'
+import { futureRain, place, radarError, radarMaps, recenterTick } from '../store'
 import { fmtHM } from '../lib/meteo'
+
+interface ViewFrame {
+  time: number
+  type: 'obs' | 'fcst'
+  path?: string
+  url?: string
+}
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const frameIdx = ref(0)
@@ -10,16 +17,32 @@ const playing = ref(false)
 
 let map: L.Map | null = null
 let marker: L.CircleMarker | null = null
-let layers: L.TileLayer[] = []
+let layers: (L.TileLayer | L.ImageOverlay)[] = []
 let added: boolean[] = []
 let timer: ReturnType<typeof setInterval> | null = null
 
-const frames = computed(() => radarMaps.value?.frames ?? [])
+const frames = computed<ViewFrame[]>(() => {
+  const rv = radarMaps.value?.frames ?? []
+  const fut = futureRain.value
+  if (!fut) return rv.map(f => ({ time: f.time, type: f.type, path: f.path }))
+  const obs = rv.filter(f => f.type === 'obs')
+  const lastObs = obs.length ? obs[obs.length - 1].time : Date.now() / 1000
+  return [
+    ...obs.map(f => ({ time: f.time, type: f.type, path: f.path })),
+    ...fut.frames.filter(f => f.time > lastObs).map(f => ({ time: f.time, type: 'fcst' as const, url: f.url })),
+  ]
+})
 const current = computed(() => frames.value[frameIdx.value] ?? null)
 const maxIdx = computed(() => Math.max(0, frames.value.length - 1))
 const note = computed(() => {
-  if (radarError.value) return 'Radar injoignable pour le moment.'
+  const fut = !!futureRain.value
+  if (radarError.value) {
+    return fut
+      ? 'Radar injoignable pour le moment, prévision Météo-France (AROME) seule.'
+      : 'Radar injoignable pour le moment.'
+  }
   if (!frames.value.length) return ''
+  if (fut) return 'Images radar des 2 dernières heures + prévision Météo-France (AROME) jusqu\'à +6 h.'
   return frames.value.some(f => f.type === 'fcst')
     ? 'Images radar des 2 dernières heures + prévision courte (déplacement des nuages).'
     : 'Images radar des 2 dernières heures. Prévision radar indisponible pour le moment, la timeline ci-dessus prend le relais.'
@@ -38,19 +61,18 @@ function showFrame(i: number): void {
 function rebuildLayers(): void {
   if (!map) return
   layers.forEach(l => map!.removeLayer(l))
-  const maps = radarMaps.value
-  if (!maps) {
-    layers = []
-    added = []
-    return
-  }
+  const host = radarMaps.value?.host
+  const fut = futureRain.value
   // grille de tuiles gratuite RainViewer limitee a z=7, atteinte au zoom carte 8 via les tuiles 512px
-  layers = maps.frames.map(f => L.tileLayer(
-    maps.host + f.path + '/512/{z}/{x}/{y}/2/1_1.png',
-    { opacity: 0, tileSize: 512, zoomOffset: -1, maxNativeZoom: 8, maxZoom: 12, zIndex: 5 },
-  ))
-  added = maps.frames.map(() => false)
-  const lastObs = maps.frames.reduce((a, f, i) => (f.type === 'obs' ? i : a), 0)
+  layers = frames.value.map(f => f.path && host
+    ? L.tileLayer(
+        host + f.path + '/512/{z}/{x}/{y}/2/1_1.png',
+        { opacity: 0, tileSize: 512, zoomOffset: -1, maxNativeZoom: 8, maxZoom: 12, zIndex: 5 },
+      )
+    : L.imageOverlay(f.url ?? '', fut?.bounds ?? [[41, -5.5], [51.5, 10]], { opacity: 0, zIndex: 5 }))
+  added = frames.value.map(() => false)
+  if (!frames.value.length) return
+  const lastObs = frames.value.reduce((a, f, i) => (f.type === 'obs' ? i : a), 0)
   showFrame(lastObs)
 }
 
@@ -87,7 +109,7 @@ onMounted(() => {
     .setView([place.value.lat, place.value.lon], 8)
   L.control.zoom({ position: 'topright' }).addTo(map)
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 12, attribution: '© OpenStreetMap | RainViewer',
+    maxZoom: 12, attribution: '© OpenStreetMap | RainViewer | Météo-France',
   }).addTo(map)
   marker = L.circleMarker([place.value.lat, place.value.lon], {
     radius: 7, color: '#fff', weight: 2, fillColor: '#1d6ef2', fillOpacity: 1,
@@ -96,7 +118,7 @@ onMounted(() => {
   rebuildLayers()
 })
 
-watch(radarMaps, rebuildLayers)
+watch([radarMaps, futureRain], rebuildLayers)
 watch(recenterTick, () => {
   map?.setView([place.value.lat, place.value.lon], 8)
   marker?.setLatLng([place.value.lat, place.value.lon])
