@@ -35,14 +35,15 @@ const frames = computed<ViewFrame[]>(() => {
 const current = computed(() => frames.value[frameIdx.value] ?? null)
 const maxIdx = computed(() => Math.max(0, frames.value.length - 1))
 const note = computed(() => {
-  const fut = !!futureRain.value
+  const fut = futureRain.value
+  const arome = fut ? 'prévision Météo-France (AROME, run de ' + fmtHM(Date.parse(fut.run)) + ')' : ''
   if (radarError.value) {
     return fut
-      ? 'Radar injoignable pour le moment, prévision Météo-France (AROME) seule.'
+      ? 'Radar injoignable pour le moment, ' + arome + ' seule.'
       : 'Radar injoignable pour le moment.'
   }
   if (!frames.value.length) return ''
-  if (fut) return 'Images radar des 2 dernières heures + prévision Météo-France (AROME) jusqu\'à +6 h.'
+  if (fut) return 'Images radar des 2 dernières heures + ' + arome + ' jusqu\'à +6 h.'
   return frames.value.some(f => f.type === 'fcst')
     ? 'Images radar des 2 dernières heures + prévision courte (déplacement des nuages).'
     : 'Images radar des 2 dernières heures. Prévision radar indisponible pour le moment, la timeline ci-dessus prend le relais.'

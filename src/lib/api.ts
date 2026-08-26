@@ -54,7 +54,8 @@ export async function fetchRain(place: Place): Promise<MfEntry[] | null> {
     + '&lon=' + place.lon + '&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance http ' + res.status)
   const data = await res.json()
-  if (!data.position || !data.position.rain_product_available || !data.forecast || !data.forecast.length) return null
+  // meteofrance.com affiche le forecast meme quand rain_product_available vaut 0 (constate a Royan sous orage) : seule l'absence de forecast fait foi
+  if (!data.forecast || !data.forecast.length) return null
   const f: { dt: number; rain: number; desc: string }[] = data.forecast
   const entries: MfEntry[] = []
   for (let i = 0; i < f.length; i++) {
