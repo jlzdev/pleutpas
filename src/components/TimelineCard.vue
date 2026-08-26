@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { nowTick, rainMF, slots } from '../store'
-import { fmtHM, intensityColor, SLOT_MIN, slotIndexNow, WET_MM } from '../lib/meteo'
+import { fmtHM, intensityColor, mfLevelColor, SLOT_MIN, slotIndexNow, WET_MM } from '../lib/meteo'
 
 interface Bar {
   label: string
@@ -39,14 +39,8 @@ const note = computed(() => {
     + ', ' + total.toFixed(1) + ' mm au total sur 2 h.'
 })
 
-const mfColors: Record<number, string> = {
-  2: 'var(--color-legere)',
-  3: 'var(--color-modere)',
-  4: 'var(--color-fort)',
-}
-
 const mfSegments = computed(() => (rainMF.value ?? []).map(e => ({
-  color: e.level >= 2 ? (mfColors[e.level] ?? 'var(--color-tresfort)') : 'var(--color-line)',
+  color: mfLevelColor(e.level),
   grow: (e.end - e.start) / 300000,
   title: fmtHM(e.start) + ' : ' + e.desc,
 })))

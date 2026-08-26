@@ -1,3 +1,5 @@
+import palette from './palette.json'
+
 export interface Place {
   name: string
   lat: number
@@ -23,13 +25,28 @@ export interface VerdictView {
   detail: string
 }
 
-export const SLOT_MIN = 15
-export const WET_MM = 0.1
-export const STALE_MS = 60 * 60 * 1000
+export const SLOT_MIN = palette.slotMin
+export const WET_MM = palette.wetMm
+export const MF_WET_LEVEL = palette.mfWetLevel
 export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
+
+const STALE_MS = 60 * 60 * 1000
+const STEP_5MIN_MS = 5 * 60 * 1000
 
 export function fmtHM(t: number | Date): string {
   return new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+}
+
+function daysuffix(tMs: number, nowMs: number): string {
+  const t = new Date(tMs)
+  const n = new Date(nowMs)
+  const days = Math.round(
+    (new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()
+      - new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()) / 86400000,
+  )
+  if (days <= 0) return ''
+  if (days === 1) return ' demain'
+  return ' ' + t.toLocaleDateString('fr-FR', { weekday: 'long' })
 }
 
 export function slotIndexNow(slots: Slot[], nowMs: number): number {
@@ -39,40 +56,44 @@ export function slotIndexNow(slots: Slot[], nowMs: number): number {
   return -1
 }
 
-export function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean {
+function slotsEndMs(slots: Slot[]): number {
+  return slots.length ? slots[slots.length - 1].start + SLOT_MIN * 60000 : 0
+}
+
+function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean | null {
   if (mf) {
     for (const e of mf) {
-      if (tMs >= e.start && tMs < e.end) return e.level >= 2
+      if (tMs >= e.start && tMs < e.end) return e.level >= MF_WET_LEVEL
     }
   }
-  if (!slots.length) return false
+  if (!slots.length) return null
   const i = Math.floor((tMs - slots[0].start) / (SLOT_MIN * 60000))
   if (i >= 0 && i < slots.length) return slots[i].mm >= WET_MM
-  return false
+  return null
 }
 
-export function isDryWindowMs(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): boolean {
+function isDryWindowMs(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): boolean {
   const endMs = startMs + durMin * 60000
-  for (let t = startMs; t < endMs; t += 5 * 60000) {
-    if (wetAtMs(slots, mf, t)) return false
+  for (let t = startMs; t < endMs; t += STEP_5MIN_MS) {
+    if (wetAtMs(slots, mf, t) !== false) return false
   }
-  return !wetAtMs(slots, mf, endMs - 1)
+  return wetAtMs(slots, mf, endMs - 1) === false
 }
 
-export function next5min(t: number): number {
-  return t % 300000 === 0 ? t + 300000 : Math.ceil(t / 300000) * 300000
+function next5min(t: number): number {
+  return (Math.floor(t / STEP_5MIN_MS) + 1) * STEP_5MIN_MS
 }
 
-export function firstWetMs(slots: Slot[], mf: MfEntry[] | null, fromMs: number): number {
-  const endMs = fromMs + 48 * 3600000
+function firstWetMs(slots: Slot[], mf: MfEntry[] | null, fromMs: number): number {
+  const endMs = Math.min(fromMs + 48 * 3600000, slotsEndMs(slots))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
-    if (wetAtMs(slots, mf, t)) return t
+    if (wetAtMs(slots, mf, t) === true) return t
   }
   return -1
 }
 
-export function nextDryDepartureMs(slots: Slot[], mf: MfEntry[] | null, fromMs: number, durMin: number): number {
-  const endMs = fromMs + 48 * 3600000
+function nextDryDepartureMs(slots: Slot[], mf: MfEntry[] | null, fromMs: number, durMin: number): number {
+  const endMs = Math.min(fromMs + 48 * 3600000, slotsEndMs(slots))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
     if (isDryWindowMs(slots, mf, t, durMin)) return t
   }
@@ -80,13 +101,17 @@ export function nextDryDepartureMs(slots: Slot[], mf: MfEntry[] | null, fromMs: 
 }
 
 export function intensityColor(mm15: number): string | null {
-  if (mm15 < WET_MM) return null
-  if (mm15 < 0.25) return 'var(--color-bruine)'
-  if (mm15 < 0.75) return 'var(--color-legere)'
-  if (mm15 < 2) return 'var(--color-modere)'
-  if (mm15 < 5) return 'var(--color-fort)'
-  if (mm15 < 12) return 'var(--color-tresfort)'
-  return 'var(--color-grele)'
+  let name: string | null = null
+  for (const s of palette.steps) {
+    if (mm15 >= s.mm) name = s.name
+  }
+  return name ? 'var(--color-' + name + ')' : null
+}
+
+export function mfLevelColor(level: number): string {
+  if (level < MF_WET_LEVEL) return 'var(--color-line)'
+  const names: Record<number, string> = { 2: 'legere', 3: 'modere', 4: 'fort' }
+  return 'var(--color-' + (names[level] ?? 'tresfort') + ')'
 }
 
 export function computeVerdict(
@@ -116,8 +141,8 @@ export function computeVerdict(
       big: 'OUI',
       sub: 'Prends ton vélo',
       detail: wetT < 0
-        ? 'Pas de pluie prévue sur les prochaines 48 h.'
-        : 'Sec jusqu\'à ' + fmtHM(wetT) + ' environ.',
+        ? 'Pas de pluie prévue jusqu\'à ' + fmtHM(slotsEndMs(slots)) + daysuffix(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
+        : 'Sec jusqu\'à ' + fmtHM(wetT) + daysuffix(wetT, nowMs) + ' environ.',
     }
   }
   if (forecastDry) {
@@ -128,19 +153,22 @@ export function computeVerdict(
       detail: 'Averse non prévue, reviens voir quand elle passe.',
     }
   }
-  const rainingNow = wetAtMs(slots, mf, nowMs) || radarWetNow === true
+  const rainingNow = wetAtMs(slots, mf, nowMs) === true || radarWetNow === true
   const wetT = firstWetMs(slots, mf, nowMs)
-  const sub = rainingNow ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtHM(wetT)
+  const sub = rainingNow || wetT < 0 ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtHM(wetT)
   const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
   if (depMs < 0) {
-    return { state: 'non', big: 'NON', sub, detail: 'Pas de fenêtre sèche trouvée sur les prochaines 48 h.' }
+    return {
+      state: 'non',
+      big: 'NON',
+      sub,
+      detail: 'Pas de fenêtre sèche trouvée d\'ici ' + fmtHM(slotsEndMs(slots)) + daysuffix(slotsEndMs(slots), nowMs) + ' (fin des prévisions).',
+    }
   }
-  const depDate = new Date(Math.max(depMs, nowMs))
-  const demain = depDate.getDate() !== new Date(nowMs).getDate() ? ' demain' : ''
   return {
     state: 'non',
     big: 'NON',
     sub,
-    detail: 'Prochain départ au sec : ' + fmtHM(depDate) + demain,
+    detail: 'Prochain départ au sec : ' + fmtHM(depMs) + daysuffix(depMs, nowMs),
   }
 }

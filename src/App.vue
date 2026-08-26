@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watchEffect } from 'vue'
 import { fetchedAt, nowTick, place, refresh, refreshing } from './store'
 import { fmtHM } from './lib/meteo'
 import VerdictCard from './components/VerdictCard.vue'
@@ -10,6 +10,8 @@ import DayCard from './components/DayCard.vue'
 
 const settingsOpen = ref(false)
 const contact = ['contact', 'pleutpas.fr'].join('@')
+
+watchEffect(() => { document.title = place.value.name + ' - Pleut pas ?' })
 const updatedStale = computed(() => fetchedAt.value !== null && nowTick.value - fetchedAt.value > 10 * 60 * 1000)
 const updatedText = computed(() => fetchedAt.value === null
   ? ''
@@ -20,7 +22,7 @@ const updatedText = computed(() => fetchedAt.value === null
   <header class="mx-auto flex max-w-[668px] items-center gap-2 px-3.5 pb-1 pt-3 desk:max-w-[888px] desk:pt-4">
     <h1 class="flex-1 text-xl font-bold">
       Pleut pas ?
-      <small class="block text-xs font-normal text-dim">{{ place.name }}, vélo boulot</small>
+      <small class="block text-sm font-normal text-dim"><span class="font-semibold text-ink">{{ place.name }}</span>, vélo boulot</small>
     </h1>
     <button class="iconbtn" aria-label="Réglages" @click="settingsOpen = !settingsOpen">⚙&#xFE0E;</button>
     <button class="iconbtn" aria-label="Actualiser" @click="refresh(true)">

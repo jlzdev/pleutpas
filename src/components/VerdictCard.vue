@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fetchedAt, nowTick, radarWetNow, rainMF, refreshing, slots, tripMin, weather } from '../store'
+import { fetchedAt, nowTick, radarPending, radarWetNow, rainMF, refreshing, slots, tripMin, weather } from '../store'
 import { computeVerdict, fmtHM, type VerdictView } from '../lib/meteo'
 
 const verdict = computed<VerdictView>(() => {
@@ -8,6 +8,9 @@ const verdict = computed<VerdictView>(() => {
     return refreshing.value
       ? { state: 'inconnu', big: '...', sub: 'Chargement', detail: '' }
       : { state: 'inconnu', big: '?', sub: 'Météo injoignable', detail: 'Vérifie ta connexion puis actualise.' }
+  }
+  if (radarPending.value && radarWetNow.value === null) {
+    return { state: 'inconnu', big: '...', sub: 'Vérification du radar', detail: '' }
   }
   return computeVerdict(slots.value, rainMF.value, radarWetNow.value, tripMin.value, nowTick.value, fetchedAt.value)
 })

@@ -21,6 +21,11 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
+.radar-map .leaflet-layer,
+.radar-map .leaflet-image-layer {
+  transition: opacity 200ms linear;
+}
+
 @layer components {
   .card {
     @apply rounded-2xl border border-[#223048] bg-panel p-3.5;

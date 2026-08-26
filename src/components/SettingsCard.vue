@@ -34,16 +34,21 @@ function onTrip(e: Event): void {
   setTripMin(parseInt((e.target as HTMLInputElement).value, 10))
 }
 
+let searchSeq = 0
+
 async function search(): Promise<void> {
   const q = query.value.trim()
   if (q.length < 2) return
+  const seq = ++searchSeq
   message.value = 'Recherche...'
   results.value = []
   try {
     const found = await searchPlaces(q)
+    if (seq !== searchSeq) return
     results.value = found
     message.value = found.length ? '' : 'Aucun lieu trouvé pour "' + q + '".'
   } catch {
+    if (seq !== searchSeq) return
     message.value = 'Recherche indisponible, vérifie ta connexion.'
   }
 }

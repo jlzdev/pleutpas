@@ -1,0 +1,13 @@
+{
+  "slotMin": 15,
+  "wetMm": 0.1,
+  "mfWetLevel": 2,
+  "steps": [
+    { "mm": 0.1, "name": "bruine", "hex": "#6ee7dc" },
+    { "mm": 0.25, "name": "legere", "hex": "#4aa8ff" },
+    { "mm": 0.75, "name": "modere", "hex": "#7c6cff" },
+    { "mm": 2, "name": "fort", "hex": "#e05ce0" },
+    { "mm": 5, "name": "tresfort", "hex": "#ff5c47" },
+    { "mm": 12, "name": "grele", "hex": "#ffd23f" }
+  ]
+}

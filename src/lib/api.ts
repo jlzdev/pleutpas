@@ -1,8 +1,8 @@
 import type { MfEntry, Place } from './meteo'
 
 export interface OpenMeteoPayload {
-  minutely_15: { time: string[]; precipitation: (number | null)[] }
-  hourly: { time: string[]; precipitation: number[]; precipitation_probability: number[] }
+  minutely_15: { time: number[]; precipitation: (number | null)[] }
+  hourly: { time: number[]; precipitation: number[]; precipitation_probability: number[] }
 }
 
 export interface RadarFrame {
@@ -43,7 +43,7 @@ export async function fetchWeather(place: Place): Promise<OpenMeteoPayload> {
     + '?latitude=' + place.lat + '&longitude=' + place.lon
     + '&minutely_15=precipitation'
     + '&hourly=precipitation,precipitation_probability'
-    + '&forecast_days=2&timezone=auto'
+    + '&forecast_days=2&timezone=auto&timeformat=unixtime'
   const res = await fetch(url)
   if (!res.ok) throw new Error('open-meteo http ' + res.status)
   return res.json()
@@ -72,8 +72,8 @@ export async function fetchRadarMaps(): Promise<RadarMaps> {
   if (!res.ok) throw new Error('rainviewer http ' + res.status)
   const wm = await res.json()
   const frames: RadarFrame[] = [
-    ...wm.radar.past.map((f: { time: number; path: string }) => ({ ...f, type: 'obs' as const })),
-    ...(wm.radar.nowcast || []).map((f: { time: number; path: string }) => ({ ...f, type: 'fcst' as const })),
+    ...(wm.radar?.past || []).map((f: { time: number; path: string }) => ({ ...f, type: 'obs' as const })),
+    ...(wm.radar?.nowcast || []).map((f: { time: number; path: string }) => ({ ...f, type: 'fcst' as const })),
   ]
   return { host: wm.host, frames }
 }
@@ -92,33 +92,57 @@ export async function fetchFutureRain(): Promise<FutureRain | null> {
   }
 }
 
-// echantillonne une image radar au-dessus du lieu (rayon ~2.5 km au zoom 7, grille max gratuite RainViewer)
+async function tileHasEcho(url: string, x0: number, y0: number, x1: number, y1: number): Promise<boolean> {
+  const res = await fetch(url)
+  if (!res.ok) throw new Error('tuile radar http ' + res.status)
+  const bmp = await createImageBitmap(await res.blob())
+  const cv = document.createElement('canvas')
+  cv.width = bmp.width
+  cv.height = bmp.height
+  const ctx = cv.getContext('2d')
+  if (!ctx) throw new Error('canvas 2d indisponible')
+  ctx.drawImage(bmp, 0, 0)
+  const img = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+  for (let i = 3; i < img.data.length; i += 4) {
+    if (img.data[i] > 60) return true
+  }
+  return false
+}
+
+// echantillonne les images radar au-dessus du lieu (rayon ~2.5 km au zoom 7, grille max gratuite RainViewer),
+// en chargeant aussi les tuiles voisines quand le disque chevauche une frontiere de tuile
 export async function sampleRadarAt(host: string, path: string, lat: number, lon: number): Promise<boolean> {
   const z = 7
   const n = 1 << z
   const ts = 256
+  const R = 3
   const xf = (lon + 180) / 360 * n
   const latR = lat * Math.PI / 180
   const yf = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n
-  const tx = Math.floor(xf)
-  const ty = Math.floor(yf)
-  const px = Math.min(ts - 1, Math.floor((xf - tx) * ts))
-  const py = Math.min(ts - 1, Math.floor((yf - ty) * ts))
-  const res = await fetch(host + path + '/' + ts + '/' + z + '/' + tx + '/' + ty + '/2/1_1.png')
-  if (!res.ok) throw new Error('tuile radar http ' + res.status)
-  const bmp = await createImageBitmap(await res.blob())
-  const cv = document.createElement('canvas')
-  cv.width = ts
-  cv.height = ts
-  const ctx = cv.getContext('2d')
-  if (!ctx) throw new Error('canvas 2d indisponible')
-  ctx.drawImage(bmp, 0, 0)
-  const R = 3
-  const x0 = Math.max(0, px - R)
-  const y0 = Math.max(0, py - R)
-  const img = ctx.getImageData(x0, y0, Math.min(ts, px + R + 1) - x0, Math.min(ts, py + R + 1) - y0)
-  for (let i = 3; i < img.data.length; i += 4) {
-    if (img.data[i] > 60) return true
+  const gx = Math.min(n * ts - 1, Math.floor(xf * ts))
+  const gy = Math.min(n * ts - 1, Math.floor(yf * ts))
+  const x0 = Math.max(0, gx - R)
+  const x1 = Math.min(n * ts - 1, gx + R)
+  const y0 = Math.max(0, gy - R)
+  const y1 = Math.min(n * ts - 1, gy + R)
+  const mainTx = Math.floor(gx / ts)
+  const mainTy = Math.floor(gy / ts)
+  for (let ty = Math.floor(y0 / ts); ty <= Math.floor(y1 / ts); ty++) {
+    for (let tx = Math.floor(x0 / ts); tx <= Math.floor(x1 / ts); tx++) {
+      const url = host + path + '/' + ts + '/' + z + '/' + tx + '/' + ty + '/2/1_1.png'
+      try {
+        const echo = await tileHasEcho(
+          url,
+          Math.max(x0, tx * ts) - tx * ts,
+          Math.max(y0, ty * ts) - ty * ts,
+          Math.min(x1, (tx + 1) * ts - 1) - tx * ts,
+          Math.min(y1, (ty + 1) * ts - 1) - ty * ts,
+        )
+        if (echo) return true
+      } catch (e) {
+        if (tx === mainTx && ty === mainTy) throw e
+      }
+    }
   }
   return false
 }

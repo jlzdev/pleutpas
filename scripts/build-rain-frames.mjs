@@ -1,6 +1,7 @@
 import { fromArrayBuffer } from 'geotiff'
 import { PNG } from 'pngjs'
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import palette from '../src/lib/palette.json' with { type: 'json' }
 
 const API = 'https://public-api.meteofrance.fr/public/aromepi/1.0/wcs/MF-NWP-HIGHRES-AROMEPI-001-FRANCE-WCS'
 const MANIFEST_URL = 'https://raw.githubusercontent.com/jlzdev/pleutpas/data/manifest.json'
@@ -9,14 +10,12 @@ const OUT = 'out'
 // la meme donnee est indexee sous deux dialectes d'identifiants selon le backend qui repond
 const FAMILIES = ['PRECIP__GROUND', 'TOTAL_PRECIPITATION__GROUND_OR_WATER_SURFACE']
 
-const PALETTE = [
-  [0.1, 0x6e, 0xe7, 0xdc],
-  [0.25, 0x4a, 0xa8, 0xff],
-  [0.75, 0x7c, 0x6c, 0xff],
-  [2, 0xe0, 0x5c, 0xe0],
-  [5, 0xff, 0x5c, 0x47],
-  [12, 0xff, 0xd2, 0x3f],
-]
+const PALETTE = palette.steps.map((s) => [
+  s.mm,
+  parseInt(s.hex.slice(1, 3), 16),
+  parseInt(s.hex.slice(3, 5), 16),
+  parseInt(s.hex.slice(5, 7), 16),
+])
 
 const key = process.env.MF_API_KEY
 if (!key) {
@@ -39,7 +38,7 @@ async function mf(url, check, attempts = 4) {
   for (let i = 1; ; i++) {
     let detail = ''
     try {
-      const res = await fetch(url, { headers: { apikey: key } })
+      const res = await fetch(url, { headers: { apikey: key }, signal: AbortSignal.timeout(60000) })
       detail = 'http ' + res.status + ' ' + (res.headers.get('content-type') || '')
       if (res.ok) {
         const out = await check(res)
@@ -114,8 +113,13 @@ const family = found.find((m) => m[2] === runId)[1]
 const coverageId = family + '___' + runId + '_PT15M'
 const runIso = runId.replaceAll('.', ':')
 
-const prev = await fetch(MANIFEST_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-if (prev && prev.run === runIso) {
+// en CI, PREV_RUN vient de la branche data via git (le CDN raw a un cache de 300 s qui rend la deduplication faillible)
+let prevRun = process.env.PREV_RUN
+if (prevRun === undefined) {
+  const prev = await fetch(MANIFEST_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+  prevRun = prev && prev.run ? prev.run : ''
+}
+if (prevRun === runIso) {
   console.log('rien de neuf, run ' + runIso + ' deja publie')
   process.exit(0)
 }

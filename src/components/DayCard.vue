@@ -16,11 +16,11 @@ const cells = computed<HourCell[]>(() => {
   const w = weather.value
   if (!w) return []
   const h = w.hourly
-  const start = h.time.findIndex(t => new Date(t).getTime() + 3600000 > nowTick.value)
+  const start = h.time.findIndex(t => t * 1000 + 3600000 > nowTick.value)
   if (start < 0) return []
   const out: HourCell[] = []
   for (let i = start; i < Math.min(start + 18, h.time.length); i++) {
-    const d = new Date(h.time[i])
+    const d = new Date(h.time[i] * 1000)
     const mm = h.precipitation[i] || 0
     const proba = h.precipitation_probability[i] || 0
     const hh = d.getHours()

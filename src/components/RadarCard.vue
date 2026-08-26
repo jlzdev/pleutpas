@@ -4,12 +4,9 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { futureRain, place, radarError, radarMaps, recenterTick } from '../store'
 import { fmtHM } from '../lib/meteo'
 
-interface ViewFrame {
-  time: number
-  type: 'obs' | 'fcst'
-  path?: string
-  url?: string
-}
+type ViewFrame =
+  | { time: number; type: 'obs' | 'fcst'; kind: 'tile'; url: string }
+  | { time: number; type: 'fcst'; kind: 'image'; url: string; bounds: [[number, number], [number, number]] }
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const frameIdx = ref(0)
@@ -19,17 +16,33 @@ let map: L.Map | null = null
 let marker: L.CircleMarker | null = null
 let layers: (L.TileLayer | L.ImageOverlay)[] = []
 let added: boolean[] = []
-let timer: ReturnType<typeof setInterval> | null = null
+let timer: ReturnType<typeof setTimeout> | null = null
+
+const FRAME_MS = 300
+const LOOP_PAUSE_MS = 1400
 
 const frames = computed<ViewFrame[]>(() => {
-  const rv = radarMaps.value?.frames ?? []
+  const maps = radarMaps.value
+  // grille de tuiles gratuite RainViewer limitee a z=7, atteinte au zoom carte 8 via les tuiles 512px
+  const tiles: ViewFrame[] = (maps?.frames ?? []).map(f => ({
+    time: f.time,
+    type: f.type,
+    kind: 'tile' as const,
+    url: maps!.host + f.path + '/512/{z}/{x}/{y}/2/1_1.png',
+  }))
   const fut = futureRain.value
-  if (!fut) return rv.map(f => ({ time: f.time, type: f.type, path: f.path }))
-  const obs = rv.filter(f => f.type === 'obs')
+  if (!fut) return tiles
+  const obs = tiles.filter(f => f.type === 'obs')
   const lastObs = obs.length ? obs[obs.length - 1].time : Date.now() / 1000
   return [
-    ...obs.map(f => ({ time: f.time, type: f.type, path: f.path })),
-    ...fut.frames.filter(f => f.time > lastObs).map(f => ({ time: f.time, type: 'fcst' as const, url: f.url })),
+    ...obs,
+    ...fut.frames.filter(f => f.time > lastObs).map(f => ({
+      time: f.time,
+      type: 'fcst' as const,
+      kind: 'image' as const,
+      url: f.url,
+      bounds: fut.bounds,
+    })),
   ]
 })
 const current = computed(() => frames.value[frameIdx.value] ?? null)
@@ -62,25 +75,46 @@ function showFrame(i: number): void {
 function rebuildLayers(): void {
   if (!map) return
   layers.forEach(l => map!.removeLayer(l))
-  const host = radarMaps.value?.host
-  const fut = futureRain.value
-  // grille de tuiles gratuite RainViewer limitee a z=7, atteinte au zoom carte 8 via les tuiles 512px
-  layers = frames.value.map(f => f.path && host
-    ? L.tileLayer(
-        host + f.path + '/512/{z}/{x}/{y}/2/1_1.png',
-        { opacity: 0, tileSize: 512, zoomOffset: -1, maxNativeZoom: 8, maxZoom: 12, zIndex: 5 },
-      )
-    : L.imageOverlay(f.url ?? '', fut?.bounds ?? [[41, -5.5], [51.5, 10]], { opacity: 0, zIndex: 5 }))
+  layers = frames.value.map(f => f.kind === 'tile'
+    ? L.tileLayer(f.url, { opacity: 0, tileSize: 512, zoomOffset: -1, maxNativeZoom: 8, maxZoom: 12, zIndex: 5 })
+    : L.imageOverlay(f.url, f.bounds, { opacity: 0, zIndex: 5 }))
   added = frames.value.map(() => false)
-  if (!frames.value.length) return
+  if (!frames.value.length) {
+    stopPlay()
+    frameIdx.value = 0
+    return
+  }
   const lastObs = frames.value.reduce((a, f, i) => (f.type === 'obs' ? i : a), 0)
   showFrame(lastObs)
 }
 
 function stopPlay(): void {
-  if (timer) clearInterval(timer)
+  if (timer) clearTimeout(timer)
   timer = null
   playing.value = false
+}
+
+function preloadLayers(): void {
+  if (!map) return
+  layers.forEach((l, i) => {
+    if (!added[i]) {
+      l.addTo(map!)
+      l.setOpacity(0)
+      added[i] = true
+    }
+  })
+}
+
+function scheduleNext(): void {
+  timer = setTimeout(() => {
+    if (!playing.value) return
+    if (!frames.value.length) {
+      stopPlay()
+      return
+    }
+    showFrame((frameIdx.value + 1) % frames.value.length)
+    scheduleNext()
+  }, frameIdx.value >= maxIdx.value ? LOOP_PAUSE_MS : FRAME_MS)
 }
 
 function togglePlay(): void {
@@ -90,9 +124,8 @@ function togglePlay(): void {
   }
   if (!frames.value.length) return
   playing.value = true
-  timer = setInterval(() => {
-    showFrame((frameIdx.value + 1) % frames.value.length)
-  }, 650)
+  preloadLayers()
+  scheduleNext()
 }
 
 function onSlide(e: Event): void {
@@ -136,7 +169,16 @@ onBeforeUnmount(() => {
 <template>
   <section class="card">
     <h2 class="hdr">Radar de précipitation</h2>
-    <div ref="mapEl" class="h-[340px] rounded-xl bg-[#0a0f18] desk:h-[520px]"></div>
+    <div class="relative">
+      <div ref="mapEl" class="radar-map h-[340px] rounded-xl bg-[#0a0f18] desk:h-[520px]"></div>
+      <div
+        v-if="current"
+        class="pointer-events-none absolute left-2 top-2 z-[1000] rounded-lg px-2.5 py-1 text-xs font-bold transition-colors"
+        :class="current.type === 'fcst' ? 'bg-legere text-[#06121f]' : 'bg-[#0a0f18]/75 text-dim'"
+      >
+        {{ current.type === 'fcst' ? 'Prévision' : 'Radar' }} {{ fmtHM(current.time * 1000) }}
+      </div>
+    </div>
     <div class="mt-2.5 flex items-center gap-2.5">
       <button class="iconbtn" :aria-label="playing ? 'Pause' : 'Lecture'" @click="togglePlay">
         <span v-if="playing">❚❚</span><span v-else>▶&#xFE0E;</span>
