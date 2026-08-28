@@ -1,19 +1,9 @@
-import type { MfEntry, Place } from './meteo'
+import palette from './palette.json'
+import { inFranceBounds, type MfEntry, type Place } from './meteo'
 
 export interface OpenMeteoPayload {
   minutely_15: { time: number[]; precipitation: (number | null)[] }
   hourly: { time: number[]; precipitation: number[]; precipitation_probability: number[] }
-}
-
-export interface RadarFrame {
-  time: number
-  path: string
-  type: 'obs' | 'fcst'
-}
-
-export interface RadarMaps {
-  host: string
-  frames: RadarFrame[]
 }
 
 export interface FutureFrame {
@@ -25,6 +15,7 @@ export interface FutureFrame {
 export interface FutureRain {
   piafRun: string | null
   aromeRun: string | null
+  past: FutureFrame[]
   frames: FutureFrame[]
 }
 
@@ -68,22 +59,12 @@ export async function fetchRain(place: Place): Promise<MfEntry[] | null> {
   return entries
 }
 
-export async function fetchRadarMaps(): Promise<RadarMaps> {
-  const res = await fetch('https://api.rainviewer.com/public/weather-maps.json')
-  if (!res.ok) throw new Error('rainviewer http ' + res.status)
-  const wm = await res.json()
-  const frames: RadarFrame[] = [
-    ...(wm.radar?.past || []).map((f: { time: number; path: string }) => ({ ...f, type: 'obs' as const })),
-    ...(wm.radar?.nowcast || []).map((f: { time: number; path: string }) => ({ ...f, type: 'fcst' as const })),
-  ]
-  return { host: wm.host, frames }
-}
-
 const DATA_BASE: string = import.meta.env.VITE_DATA_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/data'
 const PIAF_BASE: string = import.meta.env.VITE_PIAF_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/piaf'
 
 interface FrameManifest {
   run: string
+  past: FutureFrame[]
   frames: FutureFrame[]
 }
 
@@ -92,14 +73,16 @@ async function fetchManifest(base: string): Promise<FrameManifest | null> {
   if (!res.ok) throw new Error('manifest frames http ' + res.status)
   const m = await res.json()
   if (!m.run || !m.bounds || !m.frames?.length) return null
+  const toFrame = (f: { time: number; file: string }) => ({ time: f.time, url: base + '/' + f.file, bounds: m.bounds })
   return {
     run: m.run,
-    frames: m.frames.map((f: { time: number; file: string }) => ({ time: f.time, url: base + '/' + f.file, bounds: m.bounds })),
+    past: (m.past ?? []).map(toFrame),
+    frames: m.frames.map(toFrame),
   }
 }
 
-// PIAF (pas de 5 min, +3 h, run toutes les 5 min) porte le debut de l'animation,
-// AROME-PI (pas de 15 min, +6 h, run horaire) prolonge au-dela de la fin de PIAF
+// PIAF (pas de 5 min, +3 h, run toutes les 5 min) porte le passe observe et le debut de
+// l'animation, AROME-PI (pas de 15 min, +6 h, run horaire) prolonge au-dela de la fin de PIAF
 export async function fetchFutureRain(): Promise<FutureRain | null> {
   const [piaf, arome] = await Promise.all([
     fetchManifest(PIAF_BASE).catch(() => null),
@@ -110,6 +93,7 @@ export async function fetchFutureRain(): Promise<FutureRain | null> {
   return {
     piafRun: piaf ? piaf.run : null,
     aromeRun: arome ? arome.run : null,
+    past: piaf ? piaf.past : [],
     frames: [
       ...(piaf ? piaf.frames : []),
       ...(arome ? arome.frames.filter((f) => f.time > lastPiaf) : []),
@@ -117,9 +101,20 @@ export async function fetchFutureRain(): Promise<FutureRain | null> {
   }
 }
 
-async function tileEchoCount(url: string, x0: number, y0: number, x1: number, y1: number): Promise<number> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error('tuile radar http ' + res.status)
+const WET_COLORS = palette.steps
+  .filter((s) => s.mm >= palette.wetMm)
+  .map((s) => [parseInt(s.hex.slice(1, 3), 16), parseInt(s.hex.slice(3, 5), 16), parseInt(s.hex.slice(5, 7), 16)])
+
+const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
+
+// echantillonne une frame lame d'eau PIAF (PNG de la branche piaf, lignes reechantillonnees
+// en Mercator) au-dessus du lieu : fenetre 3x3 px (~5 km), mouille si un pixel porte une
+// couleur de la palette au niveau bruine ou plus (les traces restent sous le seuil verdict)
+export async function sampleFrameWet(frame: FutureFrame, lat: number, lon: number): Promise<boolean | null> {
+  const [[south, west], [north, east]] = frame.bounds
+  if (lat <= south || lat >= north || lon <= west || lon >= east) return null
+  const res = await fetch(frame.url)
+  if (!res.ok) throw new Error('frame pluie http ' + res.status)
   const bmp = await createImageBitmap(await res.blob())
   const cv = document.createElement('canvas')
   cv.width = bmp.width
@@ -127,51 +122,15 @@ async function tileEchoCount(url: string, x0: number, y0: number, x1: number, y1
   const ctx = cv.getContext('2d')
   if (!ctx) throw new Error('canvas 2d indisponible')
   ctx.drawImage(bmp, 0, 0)
-  const img = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
-  let n = 0
-  for (let i = 3; i < img.data.length; i += 4) {
-    if (img.data[i] === 255) n++
-  }
-  return n
-}
-
-// echantillonne les images radar au-dessus du lieu (rayon ~2.5 km au zoom 7, grille max gratuite RainViewer),
-// en chargeant aussi les tuiles voisines quand le disque chevauche une frontiere de tuile.
-// Calibre contre MF pluie dans l'heure le 2026-08-28 : les classes faibles de la palette (alpha < 255,
-// des -2 dBZ) sont le plus souvent non precipitantes au sol, seul un echo sature sur au moins
-// 2 pixels des tuiles brutes (option 0_0, sans lissage) vaut pluie probable
-export async function sampleRadarAt(host: string, path: string, lat: number, lon: number): Promise<boolean> {
-  const z = 7
-  const n = 1 << z
-  const ts = 256
-  const R = 3
-  const xf = (lon + 180) / 360 * n
-  const latR = lat * Math.PI / 180
-  const yf = (1 - Math.log(Math.tan(latR) + 1 / Math.cos(latR)) / Math.PI) / 2 * n
-  const gx = Math.min(n * ts - 1, Math.floor(xf * ts))
-  const gy = Math.min(n * ts - 1, Math.floor(yf * ts))
-  const x0 = Math.max(0, gx - R)
-  const x1 = Math.min(n * ts - 1, gx + R)
-  const y0 = Math.max(0, gy - R)
-  const y1 = Math.min(n * ts - 1, gy + R)
-  const mainTx = Math.floor(gx / ts)
-  const mainTy = Math.floor(gy / ts)
-  let saturated = 0
-  for (let ty = Math.floor(y0 / ts); ty <= Math.floor(y1 / ts); ty++) {
-    for (let tx = Math.floor(x0 / ts); tx <= Math.floor(x1 / ts); tx++) {
-      const url = host + path + '/' + ts + '/' + z + '/' + tx + '/' + ty + '/2/0_0.png'
-      try {
-        saturated += await tileEchoCount(
-          url,
-          Math.max(x0, tx * ts) - tx * ts,
-          Math.max(y0, ty * ts) - ty * ts,
-          Math.min(x1, (tx + 1) * ts - 1) - tx * ts,
-          Math.min(y1, (ty + 1) * ts - 1) - ty * ts,
-        )
-        if (saturated >= 2) return true
-      } catch (e) {
-        if (tx === mainTx && ty === mainTy) throw e
-      }
+  const x = Math.floor(((lon - west) / (east - west)) * bmp.width)
+  const y = Math.floor(((merc(north) - merc(lat)) / (merc(north) - merc(south))) * bmp.height)
+  const x0 = Math.max(0, x - 1)
+  const y0 = Math.max(0, y - 1)
+  const img = ctx.getImageData(x0, y0, Math.min(bmp.width - 1, x + 1) - x0 + 1, Math.min(bmp.height - 1, y + 1) - y0 + 1)
+  for (let i = 0; i < img.data.length; i += 4) {
+    if (img.data[i + 3] === 255
+      && WET_COLORS.some((c) => c[0] === img.data[i] && c[1] === img.data[i + 1] && c[2] === img.data[i + 2])) {
+      return true
     }
   }
   return false
@@ -187,8 +146,10 @@ export async function reverseGeocodeName(lat: number, lon: number): Promise<stri
 
 export async function searchPlaces(q: string): Promise<GeoResult[]> {
   const res = await fetch('https://geocoding-api.open-meteo.com/v1/search?name='
-    + encodeURIComponent(q) + '&count=5&language=fr&format=json')
+    + encodeURIComponent(q) + '&count=20&language=fr&format=json')
   if (!res.ok) throw new Error('geocoding http ' + res.status)
   const data = await res.json()
-  return data.results || []
+  return ((data.results || []) as GeoResult[])
+    .filter((r) => inFranceBounds(r.latitude, r.longitude))
+    .slice(0, 5)
 }

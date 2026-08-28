@@ -3,6 +3,7 @@
   "wetMm": 0.1,
   "mfWetLevel": 2,
   "steps": [
+    { "mm": 0.04, "name": "traces", "hex": "#3e9c94" },
     { "mm": 0.1, "name": "bruine", "hex": "#6ee7dc" },
     { "mm": 0.25, "name": "legere", "hex": "#4aa8ff" },
     { "mm": 0.75, "name": "modere", "hex": "#7c6cff" },

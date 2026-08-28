@@ -1,14 +1,12 @@
 import { computed, ref } from 'vue'
-import { BESANCON, type MfEntry, type Place, type Slot } from './lib/meteo'
+import { BESANCON, inFranceBounds, type MfEntry, type Place, type Slot } from './lib/meteo'
 import {
   fetchFutureRain,
-  fetchRadarMaps,
   fetchRain,
   fetchWeather,
-  sampleRadarAt,
+  sampleFrameWet,
   type FutureRain,
   type OpenMeteoPayload,
-  type RadarMaps,
 } from './lib/api'
 
 const KEY_TRIP = 'pleutpas.tripMin'
@@ -28,19 +26,28 @@ function loadTrip(): number {
   return Math.min(60, Math.max(5, v))
 }
 
+function cleanName(v: unknown): string {
+  if (typeof v !== 'string') return ''
+  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40)
+}
+
 function loadPlace(): Place {
   const q = new URLSearchParams(location.search)
   const lat = parseFloat(q.get('lat') ?? '')
   const lon = parseFloat(q.get('lon') ?? '')
-  if (isFinite(lat) && isFinite(lon) && Math.abs(lat) <= 90 && Math.abs(lon) <= 180) {
-    const p: Place = { name: q.get('nom') || lat.toFixed(2) + ', ' + lon.toFixed(2), lat, lon }
-    lsSet(KEY_PLACE, JSON.stringify(p))
+  if (q.has('lat') || q.has('lon') || q.has('nom')) {
     history.replaceState(null, '', location.pathname)
+  }
+  if (isFinite(lat) && isFinite(lon) && inFranceBounds(lat, lon)) {
+    const p: Place = { name: cleanName(q.get('nom')) || lat.toFixed(2) + ', ' + lon.toFixed(2), lat, lon }
+    lsSet(KEY_PLACE, JSON.stringify(p))
     return p
   }
   try {
     const p = JSON.parse(lsGet(KEY_PLACE) ?? 'null')
-    if (p && isFinite(p.lat) && isFinite(p.lon) && p.name) return p
+    if (p && isFinite(p.lat) && isFinite(p.lon) && inFranceBounds(p.lat, p.lon) && cleanName(p.name)) {
+      return { name: cleanName(p.name), lat: p.lat, lon: p.lon }
+    }
   } catch { /* entree corrompue */ }
   return BESANCON
 }
@@ -52,9 +59,7 @@ export const fetchedAt = ref<number | null>(null)
 export const rainMF = ref<MfEntry[] | null>(null)
 export const radarWetNow = ref<boolean | null>(null)
 export const radarPending = ref(false)
-export const radarMaps = ref<RadarMaps | null>(null)
 export const futureRain = ref<FutureRain | null>(null)
-export const radarError = ref(false)
 export const refreshing = ref(false)
 export const nowTick = ref(Date.now())
 export const recenterTick = ref(0)
@@ -101,32 +106,24 @@ export async function refresh(fromButton = false): Promise<void> {
     } catch { /* entree corrompue */ }
   }
   rainMF.value = r.status === 'fulfilled' ? r.value : null
-  let maps: RadarMaps | null = null
-  let wet: boolean | null = null
-  let mapsError = false
-  try {
-    maps = await fetchRadarMaps()
-    const obs = maps.frames.filter(f => f.type === 'obs')
-    const lastObs = obs.pop()
-    const prevObs = obs.pop()
-    if (lastObs) {
-      try {
-        wet = await sampleRadarAt(maps.host, lastObs.path, p.lat, p.lon)
-        if (wet && prevObs) {
-          // un echo reel persiste d'une image a l'autre, un parasite isole non
-          try {
-            wet = await sampleRadarAt(maps.host, prevObs.path, p.lat, p.lon)
-          } catch { /* confirmation impossible, on garde l'echo simple */ }
-        }
-      } catch { /* echantillonnage impossible, verdict sans radar */ }
-    }
-  } catch {
-    mapsError = true
-  }
   const fut = await futP
+  let wet: boolean | null = null
+  const past = fut?.past ?? []
+  const lastPast = past[past.length - 1]
+  const prevPast = past[past.length - 2]
+  if (lastPast) {
+    try {
+      wet = await sampleFrameWet(lastPast, p.lat, p.lon)
+      if (wet && prevPast) {
+        // une pluie reelle persiste d'une image a l'autre, un parasite isole non
+        try {
+          const confirm = await sampleFrameWet(prevPast, p.lat, p.lon)
+          if (confirm !== null) wet = confirm
+        } catch { /* confirmation impossible, on garde l'echo simple */ }
+      }
+    } catch { /* echantillonnage impossible, verdict sans radar */ }
+  }
   if (seq !== refreshSeq) return
-  radarMaps.value = maps
-  radarError.value = mapsError
   radarWetNow.value = wet
   radarPending.value = false
   futureRain.value = hasFuture(fut) ? fut : (hasFuture(futureRain.value) ? futureRain.value : null)
@@ -165,4 +162,4 @@ export function initStore(): void {
 declare global {
   interface Window { __pp: Record<string, unknown> }
 }
-window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarWetNow, radarPending, radarMaps, futureRain, slots, nowTick, refresh, setPlace }
+window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarWetNow, radarPending, futureRain, slots, nowTick, refresh, setPlace }

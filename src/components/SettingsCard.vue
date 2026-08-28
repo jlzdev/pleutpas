@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import { place, setPlace, setTripMin, tripMin } from '../store'
 import { reverseGeocodeName, searchPlaces, type GeoResult } from '../lib/api'
+import { inFranceBounds } from '../lib/meteo'
 
 const query = ref('')
 const results = ref<GeoResult[]>([])
@@ -16,6 +17,11 @@ function locateMe(): void {
   navigator.geolocation.getCurrentPosition(async pos => {
     const lat = Math.round(pos.coords.latitude * 1000) / 1000
     const lon = Math.round(pos.coords.longitude * 1000) / 1000
+    if (!inFranceBounds(lat, lon)) {
+      locating.value = false
+      message.value = 'Position hors de la zone couverte (France métropolitaine et abords).'
+      return
+    }
     let name: string | null = null
     try { name = await reverseGeocodeName(lat, lon) } catch { /* nom facultatif */ }
     locating.value = false
@@ -46,7 +52,7 @@ async function search(): Promise<void> {
     const found = await searchPlaces(q)
     if (seq !== searchSeq) return
     results.value = found
-    message.value = found.length ? '' : 'Aucun lieu trouvé pour "' + q + '".'
+    message.value = found.length ? '' : 'Aucun lieu trouvé pour "' + q + '" dans la zone couverte (France métropolitaine).'
   } catch {
     if (seq !== searchSeq) return
     message.value = 'Recherche indisponible, vérifie ta connexion.'

@@ -116,7 +116,7 @@ export async function resolvePrevRun(manifestUrl) {
   return prev && prev.run ? prev.run : ''
 }
 
-export function writeManifest(outDir, model, runIso, frames) {
+export function writeManifest(outDir, model, runIso, frames, past = []) {
   const [west, south, east, north] = frames[0].bbox
   writeFileSync(outDir + '/manifest.json', JSON.stringify({
     run: runIso,
@@ -124,5 +124,6 @@ export function writeManifest(outDir, model, runIso, frames) {
     model,
     bounds: [[south, west], [north, east]],
     frames: frames.map(({ time, file, maxMm }) => ({ time, file, maxMm })),
+    ...(past.length ? { past: past.map(({ time, file, maxMm }) => ({ time, file, maxMm })) } : {}),
   }))
 }

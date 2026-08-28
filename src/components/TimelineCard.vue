@@ -83,6 +83,7 @@ const mfRange = computed(() => {
       >{{ bar.label }}</div>
     </div>
     <div class="mt-3 flex overflow-hidden rounded-md text-center text-[10px] font-semibold text-[#06121f] desk:text-xs">
+      <span class="flex-1 bg-traces py-0.5 text-white">Traces</span>
       <span class="flex-1 bg-bruine py-0.5">Bruine</span>
       <span class="flex-1 bg-legere py-0.5">Légère</span>
       <span class="flex-1 bg-modere py-0.5 text-white">Modérée</span>

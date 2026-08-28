@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { futureRain, place, radarError, radarMaps, recenterTick } from '../store'
-import { fmtHM } from '../lib/meteo'
+import { futureRain, place, recenterTick } from '../store'
+import { fmtHM, FRANCE_BOUNDS } from '../lib/meteo'
 
-type ViewFrame =
-  | { time: number; type: 'obs' | 'fcst'; kind: 'tile'; url: string }
-  | { time: number; type: 'fcst'; kind: 'image'; url: string; bounds: [[number, number], [number, number]] }
+interface ViewFrame {
+  time: number
+  type: 'obs' | 'fcst'
+  url: string
+  bounds: [[number, number], [number, number]]
+}
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const frameIdx = ref(0)
@@ -14,7 +17,7 @@ const playing = ref(false)
 
 let map: L.Map | null = null
 let marker: L.CircleMarker | null = null
-let layers: (L.TileLayer | L.ImageOverlay)[] = []
+let layers: L.ImageOverlay[] = []
 let added: boolean[] = []
 let timer: ReturnType<typeof setTimeout> | null = null
 
@@ -22,49 +25,26 @@ const FRAME_MS = 300
 const LOOP_PAUSE_MS = 1400
 
 const frames = computed<ViewFrame[]>(() => {
-  const maps = radarMaps.value
-  // grille de tuiles gratuite RainViewer limitee a z=7, atteinte au zoom carte 8 via les tuiles 512px
-  const tiles: ViewFrame[] = (maps?.frames ?? []).map(f => ({
-    time: f.time,
-    type: f.type,
-    kind: 'tile' as const,
-    url: maps!.host + f.path + '/512/{z}/{x}/{y}/2/1_1.png',
-  }))
   const fut = futureRain.value
-  if (!fut) return tiles
-  const obs = tiles.filter(f => f.type === 'obs')
+  if (!fut) return []
+  const obs = fut.past.map(f => ({ ...f, type: 'obs' as const }))
   const lastObs = obs.length ? obs[obs.length - 1].time : Date.now() / 1000
   return [
     ...obs,
-    ...fut.frames.filter(f => f.time > lastObs).map(f => ({
-      time: f.time,
-      type: 'fcst' as const,
-      kind: 'image' as const,
-      url: f.url,
-      bounds: f.bounds,
-    })),
+    ...fut.frames.filter(f => f.time > lastObs).map(f => ({ ...f, type: 'fcst' as const })),
   ]
 })
 const current = computed(() => frames.value[frameIdx.value] ?? null)
 const maxIdx = computed(() => Math.max(0, frames.value.length - 1))
 const note = computed(() => {
   const fut = futureRain.value
-  const source = !fut
-    ? ''
-    : fut.piafRun
-      ? 'prévision Météo-France (PIAF 5 min, run de ' + fmtHM(Date.parse(fut.piafRun)) + (fut.aromeRun ? ', puis AROME' : '') + ')'
-      : 'prévision Météo-France (AROME, run de ' + fmtHM(Date.parse(fut.aromeRun!)) + ')'
-  const horizon = fut && fut.aromeRun ? '+6 h' : '+3 h'
-  if (radarError.value) {
-    return fut
-      ? 'Radar injoignable pour le moment, ' + source + ' seule.'
-      : 'Radar injoignable pour le moment.'
-  }
-  if (!frames.value.length) return ''
-  if (fut) return 'Images radar des 2 dernières heures + ' + source + ' jusqu\'à ' + horizon + '.'
-  return frames.value.some(f => f.type === 'fcst')
-    ? 'Images radar des 2 dernières heures + prévision courte (déplacement des nuages).'
-    : 'Images radar des 2 dernières heures. Prévision radar indisponible pour le moment, la timeline ci-dessus prend le relais.'
+  if (!fut) return 'Carte des pluies indisponible pour le moment, la timeline ci-dessus prend le relais.'
+  const source = fut.piafRun
+    ? 'prévision (PIAF 5 min, run de ' + fmtHM(Date.parse(fut.piafRun)) + (fut.aromeRun ? ', puis AROME' : '') + ')'
+    : 'prévision (AROME, run de ' + fmtHM(Date.parse(fut.aromeRun!)) + ')'
+  const horizon = fut.aromeRun ? '+6 h' : '+3 h'
+  const passe = fut.past.length ? 'Lame d\'eau des 2 dernières heures + ' : ''
+  return passe + source + ' jusqu\'à ' + horizon + ', données Météo-France.'
 })
 
 function showFrame(i: number): void {
@@ -74,15 +54,13 @@ function showFrame(i: number): void {
     layers[i].addTo(map)
     added[i] = true
   }
-  layers.forEach((l, j) => l.setOpacity(j === i ? 0.7 : 0))
+  layers.forEach((l, j) => l.setOpacity(j === i ? 0.85 : 0))
 }
 
 function rebuildLayers(): void {
   if (!map) return
   layers.forEach(l => map!.removeLayer(l))
-  layers = frames.value.map(f => f.kind === 'tile'
-    ? L.tileLayer(f.url, { opacity: 0, tileSize: 512, zoomOffset: -1, maxNativeZoom: 8, maxZoom: 12, zIndex: 5 })
-    : L.imageOverlay(f.url, f.bounds, { opacity: 0, zIndex: 5 }))
+  layers = frames.value.map(f => L.imageOverlay(f.url, f.bounds, { opacity: 0, zIndex: 5 }))
   added = frames.value.map(() => false)
   if (!frames.value.length) {
     stopPlay()
@@ -144,11 +122,16 @@ function onResize(): void {
 
 onMounted(() => {
   if (!mapEl.value) return
-  map = L.map(mapEl.value, { zoomControl: false, maxZoom: 12, minZoom: 4 })
-    .setView([place.value.lat, place.value.lon], 8)
+  map = L.map(mapEl.value, {
+    zoomControl: false,
+    maxZoom: 12,
+    minZoom: 5,
+    maxBounds: L.latLngBounds(FRANCE_BOUNDS).pad(0.05),
+    maxBoundsViscosity: 1,
+  }).setView([place.value.lat, place.value.lon], 8)
   L.control.zoom({ position: 'topright' }).addTo(map)
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 12, attribution: '© OpenStreetMap | RainViewer | Météo-France',
+    maxZoom: 12, attribution: '© OpenStreetMap | Météo-France',
   }).addTo(map)
   marker = L.circleMarker([place.value.lat, place.value.lon], {
     radius: 7, color: '#fff', weight: 2, fillColor: '#1d6ef2', fillOpacity: 1,
@@ -157,7 +140,7 @@ onMounted(() => {
   rebuildLayers()
 })
 
-watch([radarMaps, futureRain], rebuildLayers)
+watch(futureRain, rebuildLayers)
 watch(recenterTick, () => {
   map?.setView([place.value.lat, place.value.lon], 8)
   marker?.setLatLng([place.value.lat, place.value.lon])

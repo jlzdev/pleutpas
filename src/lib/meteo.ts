@@ -29,6 +29,14 @@ export const SLOT_MIN = palette.slotMin
 export const WET_MM = palette.wetMm
 export const MF_WET_LEVEL = palette.mfWetLevel
 export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
+// bbox des frames Meteo-France (France metro et abords immediats), limite de la recherche,
+// de la geolocalisation et du deplacement de la carte
+export const FRANCE_BOUNDS: [[number, number], [number, number]] = [[41, -5.5], [51.5, 10]]
+
+export function inFranceBounds(lat: number, lon: number): boolean {
+  const [[south, west], [north, east]] = FRANCE_BOUNDS
+  return lat >= south && lat <= north && lon >= west && lon <= east
+}
 
 const STALE_MS = 60 * 60 * 1000
 const STEP_5MIN_MS = 5 * 60 * 1000
@@ -133,7 +141,8 @@ export function computeVerdict(
     }
   }
   // MF pluie dans l'heure (radar controle qualite par Meteo-France) fait autorite sur le
-  // "maintenant" : l'echo RainViewer ne sert de detecteur de pluie que quand MF ne repond pas.
+  // "maintenant" : l'echantillonnage de la lame d'eau (frames PIAF passees) ne sert de
+  // detecteur de pluie que quand MF ne repond pas.
   // Le premier pas MF demarre au prochain multiple de 5 min, d'ou la tolerance en amont
   const mfCoversNow = !!mf && mf.length > 0
     && nowMs >= mf[0].start - 2 * STEP_5MIN_MS && nowMs < mf[mf.length - 1].end

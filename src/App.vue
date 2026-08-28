@@ -40,9 +40,8 @@ const updatedText = computed(() => fetchedAt.value === null
   <footer class="mx-auto max-w-[640px] px-3.5 pb-7 text-center text-xs text-dim desk:max-w-[860px]">
     Prévisions <a class="underline" href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
     (<a class="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>),
-    pluie dans l'heure et prévisions AROME-PI / PIAF <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>
+    pluie dans l'heure, lame d'eau radar et prévisions PIAF / AROME-PI <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>
     (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>),
-    radar passé <a class="underline" href="https://www.rainviewer.com/" target="_blank" rel="noopener">RainViewer</a>,
     nom du lieu <a class="underline" href="https://www.bigdatacloud.com/" target="_blank" rel="noopener">BigDataCloud</a>.
     <span class="block pt-1">Position : {{ place.name }}. Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.</span>
   </footer>
