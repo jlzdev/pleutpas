@@ -180,7 +180,7 @@ onBeforeUnmount(() => {
         min="0" :max="maxIdx" :value="frameIdx" @input="onSlide"
       >
       <div class="min-w-[88px] text-right text-sm tabular-nums">
-        {{ current ? fmtHM(current.time * 1000) : '--:--' }}
+        {{ current ? fmtHM(current.time * 1000) : '--h--' }}
         <span v-if="current?.type === 'fcst'" class="block text-[10px] text-bruine">prévision</span>
       </div>
     </div>

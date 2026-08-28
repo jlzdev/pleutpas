@@ -41,8 +41,11 @@ export function inFranceBounds(lat: number, lon: number): boolean {
 const STALE_MS = 60 * 60 * 1000
 const STEP_5MIN_MS = 5 * 60 * 1000
 
+// forme francaise collee ("4h15", "23h"), le format 4:15 est un anglicisme
 export function fmtHM(t: number | Date): string {
-  return new Date(t).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+  const d = new Date(t)
+  const m = d.getMinutes()
+  return d.getHours() + 'h' + (m ? String(m).padStart(2, '0') : '')
 }
 
 function fmtDayHM(tMs: number, nowMs: number): string {
