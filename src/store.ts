@@ -106,10 +106,18 @@ export async function refresh(fromButton = false): Promise<void> {
   let mapsError = false
   try {
     maps = await fetchRadarMaps()
-    const lastObs = maps.frames.filter(f => f.type === 'obs').pop()
+    const obs = maps.frames.filter(f => f.type === 'obs')
+    const lastObs = obs.pop()
+    const prevObs = obs.pop()
     if (lastObs) {
       try {
         wet = await sampleRadarAt(maps.host, lastObs.path, p.lat, p.lon)
+        if (wet && prevObs) {
+          // un echo reel persiste d'une image a l'autre, un parasite isole non
+          try {
+            wet = await sampleRadarAt(maps.host, prevObs.path, p.lat, p.lon)
+          } catch { /* confirmation impossible, on garde l'echo simple */ }
+        }
       } catch { /* echantillonnage impossible, verdict sans radar */ }
     }
   } catch {

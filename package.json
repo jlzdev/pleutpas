@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
-    "data": "node --env-file-if-exists=.env.local scripts/build-rain-frames.mjs"
+    "data": "node --env-file-if-exists=.env.local scripts/build-rain-frames.mjs",
+    "piaf": "node --env-file-if-exists=.env.local scripts/build-piaf-frames.mjs"
   },
   "dependencies": {
     "leaflet": "^1.9.4",

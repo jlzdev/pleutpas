@@ -92,7 +92,7 @@ export async function fetchFutureRain(): Promise<FutureRain | null> {
   }
 }
 
-async function tileHasEcho(url: string, x0: number, y0: number, x1: number, y1: number): Promise<boolean> {
+async function tileEchoCount(url: string, x0: number, y0: number, x1: number, y1: number): Promise<number> {
   const res = await fetch(url)
   if (!res.ok) throw new Error('tuile radar http ' + res.status)
   const bmp = await createImageBitmap(await res.blob())
@@ -103,14 +103,18 @@ async function tileHasEcho(url: string, x0: number, y0: number, x1: number, y1: 
   if (!ctx) throw new Error('canvas 2d indisponible')
   ctx.drawImage(bmp, 0, 0)
   const img = ctx.getImageData(x0, y0, x1 - x0 + 1, y1 - y0 + 1)
+  let n = 0
   for (let i = 3; i < img.data.length; i += 4) {
-    if (img.data[i] > 60) return true
+    if (img.data[i] === 255) n++
   }
-  return false
+  return n
 }
 
 // echantillonne les images radar au-dessus du lieu (rayon ~2.5 km au zoom 7, grille max gratuite RainViewer),
-// en chargeant aussi les tuiles voisines quand le disque chevauche une frontiere de tuile
+// en chargeant aussi les tuiles voisines quand le disque chevauche une frontiere de tuile.
+// Calibre contre MF pluie dans l'heure le 2026-08-28 : les classes faibles de la palette (alpha < 255,
+// des -2 dBZ) sont le plus souvent non precipitantes au sol, seul un echo sature sur au moins
+// 2 pixels des tuiles brutes (option 0_0, sans lissage) vaut pluie probable
 export async function sampleRadarAt(host: string, path: string, lat: number, lon: number): Promise<boolean> {
   const z = 7
   const n = 1 << z
@@ -127,18 +131,19 @@ export async function sampleRadarAt(host: string, path: string, lat: number, lon
   const y1 = Math.min(n * ts - 1, gy + R)
   const mainTx = Math.floor(gx / ts)
   const mainTy = Math.floor(gy / ts)
+  let saturated = 0
   for (let ty = Math.floor(y0 / ts); ty <= Math.floor(y1 / ts); ty++) {
     for (let tx = Math.floor(x0 / ts); tx <= Math.floor(x1 / ts); tx++) {
-      const url = host + path + '/' + ts + '/' + z + '/' + tx + '/' + ty + '/2/1_1.png'
+      const url = host + path + '/' + ts + '/' + z + '/' + tx + '/' + ty + '/2/0_0.png'
       try {
-        const echo = await tileHasEcho(
+        saturated += await tileEchoCount(
           url,
           Math.max(x0, tx * ts) - tx * ts,
           Math.max(y0, ty * ts) - ty * ts,
           Math.min(x1, (tx + 1) * ts - 1) - tx * ts,
           Math.min(y1, (ty + 1) * ts - 1) - ty * ts,
         )
-        if (echo) return true
+        if (saturated >= 2) return true
       } catch (e) {
         if (tx === mainTx && ty === mainTy) throw e
       }

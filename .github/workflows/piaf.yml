@@ -1,0 +1,42 @@
+name: Frames pluie PIAF
+
+on:
+  schedule:
+    - cron: '1,6,11,16,21,26,31,36,41,46,51,56 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: piaf
+  cancel-in-progress: false
+
+jobs:
+  frames:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - name: Lire le run deja publie sur la branche piaf
+        id: prev
+        run: |
+          RUN=$(git fetch -q origin piaf && git show FETCH_HEAD:manifest.json | node -e "let s='';process.stdin.on('data',d=>s+=d);process.stdin.on('end',()=>console.log(JSON.parse(s).run))" || echo "")
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+      - run: npm install --no-save geotiff pngjs
+      - run: npm run piaf
+        env:
+          MF_API_KEY: ${{ secrets.MF_API_KEY }}
+          PREV_RUN: ${{ steps.prev.outputs.run }}
+      - name: Publier la branche piaf
+        if: ${{ hashFiles('out-piaf/manifest.json') != '' }}
+        run: |
+          cd out-piaf
+          git init -q -b piaf
+          git add -A
+          git -c user.name=pleutpas-data -c user.email=163107032+jlzdev@users.noreply.github.com commit -q -m "frames $(date -u +%FT%TZ)"
+          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" piaf

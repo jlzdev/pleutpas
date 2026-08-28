@@ -1,7 +1,5 @@
-import { fromArrayBuffer } from 'geotiff'
-import { PNG } from 'pngjs'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
-import palette from '../src/lib/palette.json' with { type: 'json' }
+import { mkdirSync, rmSync } from 'node:fs'
+import { buildRun, mfXml, resolvePrevRun, writeManifest } from './frames-lib.mjs'
 
 const API = 'https://public-api.meteofrance.fr/public/aromepi/1.0/wcs/MF-NWP-HIGHRES-AROMEPI-001-FRANCE-WCS'
 const MANIFEST_URL = 'https://raw.githubusercontent.com/jlzdev/pleutpas/data/manifest.json'
@@ -10,98 +8,13 @@ const OUT = 'out'
 // la meme donnee est indexee sous deux dialectes d'identifiants selon le backend qui repond
 const FAMILIES = ['PRECIP__GROUND', 'TOTAL_PRECIPITATION__GROUND_OR_WATER_SURFACE']
 
-const PALETTE = palette.steps.map((s) => [
-  s.mm,
-  parseInt(s.hex.slice(1, 3), 16),
-  parseInt(s.hex.slice(3, 5), 16),
-  parseInt(s.hex.slice(5, 7), 16),
-])
-
 const key = process.env.MF_API_KEY
 if (!key) {
   console.error('MF_API_KEY manquant')
   process.exit(1)
 }
 
-const merc = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
-const invMerc = (y) => (Math.atan(Math.exp(y)) - Math.PI / 4) * (360 / Math.PI)
-
-function colorFor(mm) {
-  if (!Number.isFinite(mm) || mm < PALETTE[0][0]) return null
-  let c = PALETTE[0]
-  for (const p of PALETTE) if (mm >= p[0]) c = p
-  return c
-}
-
-// l'API renvoie parfois un fault XML avec un statut 200, d'ou la validation du contenu
-async function mf(url, check, attempts = 4) {
-  for (let i = 1; ; i++) {
-    let detail = ''
-    try {
-      const res = await fetch(url, { headers: { apikey: key }, signal: AbortSignal.timeout(60000) })
-      detail = 'http ' + res.status + ' ' + (res.headers.get('content-type') || '')
-      if (res.ok) {
-        const out = await check(res)
-        if (out !== null) return out
-      }
-      if (i >= attempts) throw new Error(detail)
-    } catch (e) {
-      if (i >= attempts) throw e instanceof Error ? e : new Error(detail)
-    }
-    await new Promise((r) => setTimeout(r, 5000 * i))
-  }
-}
-
-const mfXml = (url) => mf(url, async (res) => {
-  const txt = await res.text()
-  return txt.includes('<wcs:') ? txt : null
-})
-
-const mfTiff = (url) => mf(url, async (res) => {
-  if (!(res.headers.get('content-type') || '').includes('tiff')) return null
-  return res.arrayBuffer()
-})
-
-function colorize(data, width, height, north, south) {
-  const png = new PNG({ width, height })
-  const yTop = merc(north)
-  const yBot = merc(south)
-  let maxMm = 0
-  for (let j = 0; j < height; j++) {
-    const lat = invMerc(yTop + ((yBot - yTop) * (j + 0.5)) / height)
-    const src = Math.max(0, Math.min(height - 1, Math.round(((north - lat) / (north - south)) * height - 0.5)))
-    for (let i = 0; i < width; i++) {
-      const v = data[src * width + i]
-      if (Number.isFinite(v) && v > maxMm) maxMm = v
-      const c = colorFor(v)
-      const o = (j * width + i) * 4
-      if (c) {
-        png.data[o] = c[1]
-        png.data[o + 1] = c[2]
-        png.data[o + 2] = c[3]
-        png.data[o + 3] = 255
-      }
-    }
-  }
-  return { buffer: PNG.sync.write(png), maxMm: +maxMm.toFixed(2) }
-}
-
-async function buildFrame(coverageId, tMs) {
-  const iso = new Date(tMs).toISOString().replace('.000', '')
-  const buf = await mfTiff(API + '/GetCoverage?service=WCS&version=2.0.1&coverageid=' + coverageId
-    + '&subset=time(' + iso + ')' + SUBSET)
-  const tiff = await fromArrayBuffer(buf)
-  const image = await tiff.getImage()
-  const [west, south, east, north] = image.getBoundingBox()
-  const rasters = await image.readRasters()
-  const { buffer, maxMm } = colorize(rasters[0], image.getWidth(), image.getHeight(), north, south)
-  const file = 'frames/' + iso.slice(0, 16).replace(/[-:]/g, '') + 'Z.png'
-  writeFileSync(OUT + '/' + file, buffer)
-  console.log(iso + ' -> ' + file + ' (max ' + maxMm + ' mm/15 min)')
-  return { time: tMs / 1000, file, maxMm, bbox: [west, south, east, north] }
-}
-
-const caps = await mfXml(API + '/GetCapabilities?service=WCS&version=2.0.1&language=eng')
+const caps = await mfXml(key, API + '/GetCapabilities?service=WCS&version=2.0.1&language=eng')
 const runRe = new RegExp('(' + FAMILIES.join('|') + ')___(\\d{4}-\\d{2}-\\d{2}T\\d{2}\\.\\d{2}\\.\\d{2}Z)_PT15M', 'g')
 const found = [...caps.matchAll(runRe)]
 if (!found.length) {
@@ -110,33 +23,7 @@ if (!found.length) {
 }
 const runs = [...new Set(found.map((m) => m[2]))].sort().reverse().slice(0, 3)
 
-// en CI, PREV_RUN vient de la branche data via git (le CDN raw a un cache de 300 s qui rend la deduplication faillible)
-let prevRun = process.env.PREV_RUN
-if (prevRun === undefined) {
-  const prev = await fetch(MANIFEST_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-  prevRun = prev && prev.run ? prev.run : ''
-}
-
-async function buildRun(coverageId, runMs) {
-  rmSync(OUT, { recursive: true, force: true })
-  mkdirSync(OUT + '/frames', { recursive: true })
-  const steps = Array.from({ length: 24 }, (_, k) => runMs + (k + 1) * 900000)
-  const results = []
-  let next = 0
-  let fails = 0
-  await Promise.all(Array.from({ length: 4 }, async () => {
-    while (next < steps.length && fails <= steps.length - 12) {
-      const i = next++
-      try {
-        results[i] = await buildFrame(coverageId, steps[i])
-      } catch (e) {
-        fails++
-        console.error('frame ' + new Date(steps[i]).toISOString() + ' abandonnee : ' + e.message)
-      }
-    }
-  }))
-  return results.filter(Boolean)
-}
+const prevRun = await resolvePrevRun(MANIFEST_URL)
 
 // MF annonce un run dans le catalogue avant d'avoir fini de charger ses echeances (404 pendant ~30 min),
 // d'ou le repli sur le run precedent quand le plus recent est incomplet
@@ -146,20 +33,17 @@ for (const runId of runs) {
     console.log('rien de neuf, run ' + runIso + ' deja publie')
     process.exit(0)
   }
+  rmSync(OUT, { recursive: true, force: true })
+  mkdirSync(OUT + '/frames', { recursive: true })
   const family = found.find((m) => m[2] === runId)[1]
-  const frames = await buildRun(family + '___' + runId + '_PT15M', Date.parse(runIso))
+  const runMs = Date.parse(runIso)
+  const steps = Array.from({ length: 24 }, (_, k) => runMs + (k + 1) * 900000)
+  const frames = await buildRun({ key, api: API, subset: SUBSET, outDir: OUT }, family + '___' + runId + '_PT15M', steps, 12)
   if (frames.length < 12) {
     console.error('run ' + runIso + ' incomplet (' + frames.length + '/24 frames), repli sur le run precedent')
     continue
   }
-  const [west, south, east, north] = frames[0].bbox
-  writeFileSync(OUT + '/manifest.json', JSON.stringify({
-    run: runIso,
-    generatedAt: new Date().toISOString(),
-    model: 'aromepi-001-pt15m',
-    bounds: [[south, west], [north, east]],
-    frames: frames.map(({ time, file, maxMm }) => ({ time, file, maxMm })),
-  }))
+  writeManifest(OUT, 'aromepi-001-pt15m', runIso, frames)
   console.log('run ' + runIso + ' : ' + frames.length + ' frames pretes dans ' + OUT + '/')
   process.exit(0)
 }

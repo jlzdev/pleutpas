@@ -132,8 +132,14 @@ export function computeVerdict(
       detail: 'Actualise quand tu as du réseau.',
     }
   }
+  // MF pluie dans l'heure (radar controle qualite par Meteo-France) fait autorite sur le
+  // "maintenant" : l'echo RainViewer ne sert de detecteur de pluie que quand MF ne repond pas.
+  // Le premier pas MF demarre au prochain multiple de 5 min, d'ou la tolerance en amont
+  const mfCoversNow = !!mf && mf.length > 0
+    && nowMs >= mf[0].start - 2 * STEP_5MIN_MS && nowMs < mf[mf.length - 1].end
+  const radarNow = mfCoversNow ? null : radarWetNow
   const forecastDry = isDryWindowMs(slots, mf, nowMs, tripMin)
-  const dry = forecastDry && radarWetNow !== true
+  const dry = forecastDry && radarNow !== true
   if (dry) {
     const wetT = firstWetMs(slots, mf, nowMs)
     return {
@@ -153,7 +159,7 @@ export function computeVerdict(
       detail: 'Averse non prévue, reviens voir quand elle passe.',
     }
   }
-  const rainingNow = wetAtMs(slots, mf, nowMs) === true || radarWetNow === true
+  const rainingNow = wetAtMs(slots, mf, nowMs) === true || radarNow === true
   const wetT = firstWetMs(slots, mf, nowMs)
   const sub = rainingNow || wetT < 0 ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtDayHM(wetT, nowMs)
   const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
