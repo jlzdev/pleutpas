@@ -39,7 +39,7 @@ export function inFranceBounds(lat: number, lon: number): boolean {
 }
 
 const STALE_MS = 60 * 60 * 1000
-const STEP_5MIN_MS = 5 * 60 * 1000
+export const STEP_5MIN_MS = 5 * 60 * 1000
 
 // forme francaise collee ("4h15", "23h"), le format 4:15 est un anglicisme
 export function fmtHM(t: number | Date): string {
@@ -71,16 +71,25 @@ function slotsEndMs(slots: Slot[]): number {
   return slots.length ? slots[slots.length - 1].start + SLOT_MIN * 60000 : 0
 }
 
-function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean | null {
-  if (mf) {
-    for (const e of mf) {
-      if (tMs >= e.start && tMs < e.end) return e.level >= MF_WET_LEVEL
-    }
+function mfEntryAt(mf: MfEntry[] | null, tMs: number): MfEntry | null {
+  if (!mf) return null
+  for (const e of mf) {
+    if (tMs >= e.start && tMs < e.end) return e
   }
+  return null
+}
+
+function slotAt(slots: Slot[], tMs: number): Slot | null {
   if (!slots.length) return null
   const i = Math.floor((tMs - slots[0].start) / (SLOT_MIN * 60000))
-  if (i >= 0 && i < slots.length) return slots[i].mm >= WET_MM
-  return null
+  return i >= 0 && i < slots.length ? slots[i] : null
+}
+
+function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean | null {
+  const e = mfEntryAt(mf, tMs)
+  if (e) return e.level >= MF_WET_LEVEL
+  const s = slotAt(slots, tMs)
+  return s ? s.mm >= WET_MM : null
 }
 
 function isDryWindowMs(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): boolean {
@@ -123,6 +132,39 @@ export function mfLevelColor(level: number): string {
   if (level < MF_WET_LEVEL) return 'var(--color-line)'
   const names: Record<number, string> = { 2: 'legere', 3: 'modere', 4: 'fort' }
   return 'var(--color-' + (names[level] ?? 'tresfort') + ')'
+}
+
+export interface TimelineCell {
+  start: number
+  wet: boolean
+  color: string | null
+  title: string
+}
+
+// vue unique des 2 prochaines heures en cases de 5 min, memes sources et meme priorite
+// que le verdict (MF pluie dans l'heure d'abord, Open-Meteo au-dela), pour que la carte
+// timeline ne puisse jamais contredire le OUI/NON
+export function timelineCells(slots: Slot[], mf: MfEntry[] | null, nowMs: number): TimelineCell[] {
+  const firstMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS
+  const cells: TimelineCell[] = []
+  for (let i = 0; i < 24; i++) {
+    const t = firstMs + i * STEP_5MIN_MS
+    const e = mfEntryAt(mf, t)
+    if (e) {
+      const wet = e.level >= MF_WET_LEVEL
+      cells.push({ start: t, wet, color: wet ? mfLevelColor(e.level) : null, title: fmtHM(t) + ' : ' + e.desc })
+      continue
+    }
+    const s = slotAt(slots, t)
+    if (!s) break
+    cells.push({
+      start: t,
+      wet: s.mm >= WET_MM,
+      color: intensityColor(s.mm),
+      title: fmtHM(t) + ' : ' + s.mm.toFixed(1) + ' mm / 15 min',
+    })
+  }
+  return cells
 }
 
 export function computeVerdict(
