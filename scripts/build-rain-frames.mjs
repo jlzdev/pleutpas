@@ -108,10 +108,7 @@ if (!found.length) {
   console.error('aucun run pluie PT15M dans le GetCapabilities')
   process.exit(1)
 }
-const runId = [...new Set(found.map((m) => m[2]))].sort().at(-1)
-const family = found.find((m) => m[2] === runId)[1]
-const coverageId = family + '___' + runId + '_PT15M'
-const runIso = runId.replaceAll('.', ':')
+const runs = [...new Set(found.map((m) => m[2]))].sort().reverse().slice(0, 3)
 
 // en CI, PREV_RUN vient de la branche data via git (le CDN raw a un cache de 300 s qui rend la deduplication faillible)
 let prevRun = process.env.PREV_RUN
@@ -119,43 +116,54 @@ if (prevRun === undefined) {
   const prev = await fetch(MANIFEST_URL).then((r) => (r.ok ? r.json() : null)).catch(() => null)
   prevRun = prev && prev.run ? prev.run : ''
 }
-if (prevRun === runIso) {
-  console.log('rien de neuf, run ' + runIso + ' deja publie')
+
+async function buildRun(coverageId, runMs) {
+  rmSync(OUT, { recursive: true, force: true })
+  mkdirSync(OUT + '/frames', { recursive: true })
+  const steps = Array.from({ length: 24 }, (_, k) => runMs + (k + 1) * 900000)
+  const results = []
+  let next = 0
+  let fails = 0
+  await Promise.all(Array.from({ length: 4 }, async () => {
+    while (next < steps.length && fails <= steps.length - 12) {
+      const i = next++
+      try {
+        results[i] = await buildFrame(coverageId, steps[i])
+      } catch (e) {
+        fails++
+        console.error('frame ' + new Date(steps[i]).toISOString() + ' abandonnee : ' + e.message)
+      }
+    }
+  }))
+  return results.filter(Boolean)
+}
+
+// MF annonce un run dans le catalogue avant d'avoir fini de charger ses echeances (404 pendant ~30 min),
+// d'ou le repli sur le run precedent quand le plus recent est incomplet
+for (const runId of runs) {
+  const runIso = runId.replaceAll('.', ':')
+  if (prevRun === runIso) {
+    console.log('rien de neuf, run ' + runIso + ' deja publie')
+    process.exit(0)
+  }
+  const family = found.find((m) => m[2] === runId)[1]
+  const frames = await buildRun(family + '___' + runId + '_PT15M', Date.parse(runIso))
+  if (frames.length < 12) {
+    console.error('run ' + runIso + ' incomplet (' + frames.length + '/24 frames), repli sur le run precedent')
+    continue
+  }
+  const [west, south, east, north] = frames[0].bbox
+  writeFileSync(OUT + '/manifest.json', JSON.stringify({
+    run: runIso,
+    generatedAt: new Date().toISOString(),
+    model: 'aromepi-001-pt15m',
+    bounds: [[south, west], [north, east]],
+    frames: frames.map(({ time, file, maxMm }) => ({ time, file, maxMm })),
+  }))
+  console.log('run ' + runIso + ' : ' + frames.length + ' frames pretes dans ' + OUT + '/')
   process.exit(0)
 }
 
 rmSync(OUT, { recursive: true, force: true })
-mkdirSync(OUT + '/frames', { recursive: true })
-
-const runMs = Date.parse(runIso)
-const steps = Array.from({ length: 24 }, (_, k) => runMs + (k + 1) * 900000)
-const results = []
-let next = 0
-await Promise.all(Array.from({ length: 4 }, async () => {
-  while (next < steps.length) {
-    const i = next++
-    try {
-      results[i] = await buildFrame(coverageId, steps[i])
-    } catch (e) {
-      console.error('frame ' + new Date(steps[i]).toISOString() + ' abandonnee : ' + e.message)
-      results[i] = null
-    }
-  }
-}))
-
-const frames = results.filter(Boolean)
-if (frames.length < 12) {
-  console.error('run ' + runIso + ' incomplet (' + frames.length + '/24 frames), publication annulee')
-  rmSync(OUT, { recursive: true, force: true })
-  process.exit(1)
-}
-
-const [west, south, east, north] = frames[0].bbox
-writeFileSync(OUT + '/manifest.json', JSON.stringify({
-  run: runIso,
-  generatedAt: new Date().toISOString(),
-  model: 'aromepi-001-pt15m',
-  bounds: [[south, west], [north, east]],
-  frames: frames.map(({ time, file, maxMm }) => ({ time, file, maxMm })),
-}))
-console.log('run ' + runIso + ' : ' + frames.length + ' frames pretes dans ' + OUT + '/')
+console.error('aucun run complet parmi ' + runs.map((r) => r.replaceAll('.', ':')).join(', ') + ', publication annulee')
+process.exit(1)
