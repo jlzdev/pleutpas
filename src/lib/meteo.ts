@@ -48,16 +48,21 @@ export function fmtHM(t: number | Date): string {
   return d.getHours() + 'h' + (m ? String(m).padStart(2, '0') : '')
 }
 
-function fmtDayHM(tMs: number, nowMs: number): string {
+export function fmtDay(tMs: number, nowMs: number): string {
   const t = new Date(tMs)
   const n = new Date(nowMs)
   const days = Math.round(
     (new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()
       - new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()) / 86400000,
   )
-  if (days <= 0) return fmtHM(tMs)
-  if (days === 1) return 'demain ' + fmtHM(tMs)
-  return t.toLocaleDateString('fr-FR', { weekday: 'long' }) + ' ' + fmtHM(tMs)
+  if (days <= 0) return ''
+  if (days === 1) return 'demain'
+  return t.toLocaleDateString('fr-FR', { weekday: 'long' })
+}
+
+function fmtDayHM(tMs: number, nowMs: number): string {
+  const d = fmtDay(tMs, nowMs)
+  return d ? d + ' ' + fmtHM(tMs) : fmtHM(tMs)
 }
 
 export function slotIndexNow(slots: Slot[], nowMs: number): number {
@@ -163,6 +168,36 @@ export function timelineCells(slots: Slot[], mf: MfEntry[] | null, nowMs: number
       color: intensityColor(s.mm),
       title: fmtHM(t) + ' : ' + s.mm.toFixed(1) + ' mm / 15 min',
     })
+  }
+  return cells
+}
+
+export interface DayCell {
+  start: number
+  mm: number
+  wetAt: number | null
+}
+
+// prend le relais de la timeline 2 h : cumuls horaires recalcules depuis la meme serie
+// minutely_15 que lit le verdict au-dela de l'heure MF, coherence par construction
+export function dayCells(slots: Slot[], nowMs: number): DayCell[] {
+  const bandEndMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + 24 * STEP_5MIN_MS
+  const firstHourMs = Math.floor(bandEndMs / 3600000) * 3600000
+  const cells: DayCell[] = []
+  for (let i = 0; i < 24; i++) {
+    const h0 = firstHourMs + i * 3600000
+    let mm = 0
+    let wetAt: number | null = null
+    let filled = 0
+    for (let t = h0; t < h0 + 3600000; t += SLOT_MIN * 60000) {
+      const s = slotAt(slots, t)
+      if (!s) break
+      filled++
+      mm += s.mm
+      if (wetAt === null && s.mm >= WET_MM) wetAt = s.start
+    }
+    if (filled < 4) break
+    cells.push({ start: h0, mm, wetAt })
   }
   return cells
 }

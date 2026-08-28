@@ -11,7 +11,7 @@ const rainMarks = computed(() => {
   const firstWet = c.findIndex(x => x.wet)
   if (firstWet < 0) return marks
   const push = (i: number) => {
-    if (i >= 3 && i <= c.length - 2 && !marks.some(m => Math.abs(m.i - i) < 3)) {
+    if (i >= 1 && i <= c.length - 2 && !marks.some(m => Math.abs(m.i - i) < 3)) {
       marks.push({ i, label: fmtHM(c[i].start), left: (i / c.length) * 100 + '%' })
     }
   }
@@ -29,7 +29,7 @@ const rainMarks = computed(() => {
 
 const ticks = computed(() => cells.value
   .map((c, i) => ({ start: c.start, i }))
-  .filter(({ start, i }) => i >= 3 && i <= 21 && new Date(start).getMinutes() % 30 === 0
+  .filter(({ start, i }) => i >= 2 && i <= 21 && new Date(start).getMinutes() % 30 === 0
     && !rainMarks.value.some(m => Math.abs(m.i - i) < 3))
   .map(({ start, i }) => ({ label: fmtHM(start), left: (i / cells.value.length) * 100 + '%' })))
 
@@ -77,7 +77,6 @@ const note = computed(() => {
         ></span>
       </div>
       <div class="relative mt-1 h-5">
-        <span class="absolute left-0 top-0 text-[10px] font-bold text-ink desk:text-xs">maint.</span>
         <template v-for="t in ticks" :key="t.label">
           <span class="absolute top-0 h-1.5 w-px bg-dim" :style="{ left: t.left }"></span>
           <span class="absolute top-1.5 -translate-x-1/2 text-[10px] text-dim desk:text-xs" :style="{ left: t.left }">{{ t.label }}</span>
