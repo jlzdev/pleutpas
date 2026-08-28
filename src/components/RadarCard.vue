@@ -37,14 +37,12 @@ const frames = computed<ViewFrame[]>(() => {
 const current = computed(() => frames.value[frameIdx.value] ?? null)
 const maxIdx = computed(() => Math.max(0, frames.value.length - 1))
 const note = computed(() => {
-  const fut = futureRain.value
-  if (!fut) return 'Carte des pluies indisponible pour le moment, la timeline ci-dessus prend le relais.'
-  const source = fut.piafRun
-    ? 'prévision (PIAF 5 min, run de ' + fmtHM(Date.parse(fut.piafRun)) + (fut.aromeRun ? ', puis AROME' : '') + ')'
-    : 'prévision (AROME, run de ' + fmtHM(Date.parse(fut.aromeRun!)) + ')'
-  const horizon = fut.aromeRun ? '+6 h' : '+3 h'
-  const passe = fut.past.length ? 'Lame d\'eau des 2 dernières heures + ' : ''
-  return passe + source + ' jusqu\'à ' + horizon + ', données Météo-France.'
+  const fs = frames.value
+  if (!fs.length) return 'Carte des pluies indisponible pour le moment, la timeline ci-dessus prend le relais.'
+  const end = fmtHM(fs[fs.length - 1].time * 1000)
+  return fs[0].type === 'obs'
+    ? 'La pluie des 2 dernières heures, puis la prévision jusqu\'à ' + end + '.'
+    : 'La pluie prévue jusqu\'à ' + end + '.'
 })
 
 function showFrame(i: number): void {

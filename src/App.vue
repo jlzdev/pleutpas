@@ -43,6 +43,6 @@ const updatedText = computed(() => fetchedAt.value === null
     pluie dans l'heure, lame d'eau radar et prévisions PIAF / AROME-PI <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>
     (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>),
     nom du lieu <a class="underline" href="https://www.bigdatacloud.com/" target="_blank" rel="noopener">BigDataCloud</a>.
-    <span class="block pt-1">Position : {{ place.name }}. Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.</span>
+    <span class="block pt-1">Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.</span>
   </footer>
 </template>

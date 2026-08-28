@@ -18,10 +18,10 @@ const verdict = computed<VerdictView>(() => {
 
 <template>
   <section
-    class="rounded-2xl px-3.5 py-6 text-center text-white transition-colors"
+    class="rounded-2xl px-3.5 py-5 text-center text-white transition-colors"
     :class="{ 'v-oui': verdict.state === 'oui', 'v-non': verdict.state === 'non', 'v-inconnu': verdict.state === 'inconnu' }"
   >
-    <div class="text-[clamp(64px,22vw,110px)] font-extrabold leading-none tracking-wide desk:text-[132px]">{{ verdict.big }}</div>
+    <div class="text-[clamp(52px,17vw,84px)] font-extrabold leading-none tracking-wide desk:text-[100px]">{{ verdict.big }}</div>
     <div class="mt-2 text-lg font-semibold desk:text-[22px]">{{ verdict.sub }}</div>
     <div class="mt-1 text-sm opacity-90 desk:text-[17px]">{{ verdict.detail }}</div>
     <div v-if="fetchedAt" class="mt-2.5 text-xs opacity-75">Trajet de {{ tripMin }} min, données de {{ fmtHM(fetchedAt) }}</div>
