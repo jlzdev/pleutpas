@@ -67,8 +67,12 @@ function rebuildLayers(): void {
     frameIdx.value = 0
     return
   }
-  const lastObs = frames.value.reduce((a, f, i) => (f.type === 'obs' ? i : a), 0)
-  showFrame(lastObs)
+  const nowSec = Date.now() / 1000
+  const nearestNow = frames.value.reduce(
+    (best, f, i) => (Math.abs(f.time - nowSec) < Math.abs(frames.value[best].time - nowSec) ? i : best),
+    0,
+  )
+  showFrame(nearestNow)
 }
 
 function stopPlay(): void {
