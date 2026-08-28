@@ -19,11 +19,12 @@ export interface RadarMaps {
 export interface FutureFrame {
   time: number
   url: string
+  bounds: [[number, number], [number, number]]
 }
 
 export interface FutureRain {
-  run: string
-  bounds: [[number, number], [number, number]]
+  piafRun: string | null
+  aromeRun: string | null
   frames: FutureFrame[]
 }
 
@@ -79,16 +80,40 @@ export async function fetchRadarMaps(): Promise<RadarMaps> {
 }
 
 const DATA_BASE: string = import.meta.env.VITE_DATA_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/data'
+const PIAF_BASE: string = import.meta.env.VITE_PIAF_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/piaf'
 
-export async function fetchFutureRain(): Promise<FutureRain | null> {
-  const res = await fetch(DATA_BASE + '/manifest.json')
+interface FrameManifest {
+  run: string
+  frames: FutureFrame[]
+}
+
+async function fetchManifest(base: string): Promise<FrameManifest | null> {
+  const res = await fetch(base + '/manifest.json')
   if (!res.ok) throw new Error('manifest frames http ' + res.status)
   const m = await res.json()
   if (!m.run || !m.bounds || !m.frames?.length) return null
   return {
     run: m.run,
-    bounds: m.bounds,
-    frames: m.frames.map((f: { time: number; file: string }) => ({ time: f.time, url: DATA_BASE + '/' + f.file })),
+    frames: m.frames.map((f: { time: number; file: string }) => ({ time: f.time, url: base + '/' + f.file, bounds: m.bounds })),
+  }
+}
+
+// PIAF (pas de 5 min, +3 h, run toutes les 5 min) porte le debut de l'animation,
+// AROME-PI (pas de 15 min, +6 h, run horaire) prolonge au-dela de la fin de PIAF
+export async function fetchFutureRain(): Promise<FutureRain | null> {
+  const [piaf, arome] = await Promise.all([
+    fetchManifest(PIAF_BASE).catch(() => null),
+    fetchManifest(DATA_BASE).catch(() => null),
+  ])
+  if (!piaf && !arome) return null
+  const lastPiaf = piaf ? piaf.frames[piaf.frames.length - 1].time : 0
+  return {
+    piafRun: piaf ? piaf.run : null,
+    aromeRun: arome ? arome.run : null,
+    frames: [
+      ...(piaf ? piaf.frames : []),
+      ...(arome ? arome.frames.filter((f) => f.time > lastPiaf) : []),
+    ],
   }
 }
 

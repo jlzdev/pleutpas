@@ -41,7 +41,7 @@ const frames = computed<ViewFrame[]>(() => {
       type: 'fcst' as const,
       kind: 'image' as const,
       url: f.url,
-      bounds: fut.bounds,
+      bounds: f.bounds,
     })),
   ]
 })
@@ -49,14 +49,19 @@ const current = computed(() => frames.value[frameIdx.value] ?? null)
 const maxIdx = computed(() => Math.max(0, frames.value.length - 1))
 const note = computed(() => {
   const fut = futureRain.value
-  const arome = fut ? 'prévision Météo-France (AROME, run de ' + fmtHM(Date.parse(fut.run)) + ')' : ''
+  const source = !fut
+    ? ''
+    : fut.piafRun
+      ? 'prévision Météo-France (PIAF 5 min, run de ' + fmtHM(Date.parse(fut.piafRun)) + (fut.aromeRun ? ', puis AROME' : '') + ')'
+      : 'prévision Météo-France (AROME, run de ' + fmtHM(Date.parse(fut.aromeRun!)) + ')'
+  const horizon = fut && fut.aromeRun ? '+6 h' : '+3 h'
   if (radarError.value) {
     return fut
-      ? 'Radar injoignable pour le moment, ' + arome + ' seule.'
+      ? 'Radar injoignable pour le moment, ' + source + ' seule.'
       : 'Radar injoignable pour le moment.'
   }
   if (!frames.value.length) return ''
-  if (fut) return 'Images radar des 2 dernières heures + ' + arome + ' jusqu\'à +6 h.'
+  if (fut) return 'Images radar des 2 dernières heures + ' + source + ' jusqu\'à ' + horizon + '.'
   return frames.value.some(f => f.type === 'fcst')
     ? 'Images radar des 2 dernières heures + prévision courte (déplacement des nuages).'
     : 'Images radar des 2 dernières heures. Prévision radar indisponible pour le moment, la timeline ci-dessus prend le relais.'
