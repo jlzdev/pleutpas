@@ -39,10 +39,39 @@ async function mf(key, url, check, attempts = 4) {
   }
 }
 
-export const mfXml = (key, url) => mf(key, url, async (res) => {
+// le catalogue est parfois servi valide mais vide (rechargement cote MF), d'ou la
+// validation des runs dans la boucle de retries plutot qu'apres coup
+const mfRuns = (key, url, runRe) => mf(key, url, async (res) => {
   const txt = await res.text()
-  return txt.includes('<wcs:') ? txt : null
+  if (!txt.includes('<wcs:')) return null
+  const found = [...txt.matchAll(runRe)]
+  return found.length ? found : null
 })
+
+// une indisponibilite passagere de MF ne doit pas peindre le run en rouge : la branche de
+// donnees publiee reste servie et le prochain tick retente dans quelques minutes
+export function bail(prevRun, maxAgeMs, msg) {
+  console.error(msg)
+  const age = Date.now() - Date.parse(prevRun || '')
+  if (Number.isFinite(age) && Math.abs(age) <= maxAgeMs) {
+    console.log('le run publie ' + prevRun + ' reste recent, nouvel essai au prochain tick')
+    process.exit(0)
+  }
+  console.error(prevRun ? 'dernier run publie ' + prevRun + ' trop vieux ou illisible' : 'aucun run publie')
+  process.exit(1)
+}
+
+// runRe doit capturer l'horodatage du run dans un groupe nomme "run"
+export async function catalogRuns(key, api, runRe, giveUp) {
+  let found
+  try {
+    found = await mfRuns(key, api + '/GetCapabilities?service=WCS&version=2.0.1&language=eng', runRe)
+  } catch (e) {
+    giveUp('GetCapabilities indisponible ou sans run attendu (' + e.message + ')')
+  }
+  const all = new Set(found.map((m) => m.groups.run))
+  return { found, all, runs: [...all].sort().reverse().slice(0, 3) }
+}
 
 const mfTiff = (key, url) => mf(key, url, async (res) => {
   if (!(res.headers.get('content-type') || '').includes('tiff')) return null
@@ -110,8 +139,9 @@ export async function buildRun(cfg, coverageId, steps, minFrames) {
 }
 
 export async function resolvePrevRun(manifestUrl) {
-  // en CI, PREV_RUN vient de la branche de donnees via git (le CDN raw a un cache de 300 s qui rend la deduplication faillible)
-  if (process.env.PREV_RUN !== undefined) return process.env.PREV_RUN
+  // en CI, PREV_RUN vient de la branche de donnees via git (le CDN raw a un cache de 300 s
+  // qui rend la deduplication faillible) ; vide (echec du fetch git) -> repli sur le CDN
+  if (process.env.PREV_RUN) return process.env.PREV_RUN
   const prev = await fetch(manifestUrl).then((r) => (r.ok ? r.json() : null)).catch(() => null)
   return prev && prev.run ? prev.run : ''
 }

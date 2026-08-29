@@ -1,7 +1,7 @@
 {
   "name": "pleutpas",
   "private": true,
-  "version": "2.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -11,15 +11,15 @@
     "piaf": "node --env-file-if-exists=.env.local scripts/build-piaf-frames.mjs"
   },
   "dependencies": {
+    "geotiff": "^3.0.5",
     "leaflet": "^1.9.4",
+    "pngjs": "^7.0.0",
     "vue": "^3.5.41"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",
     "@types/leaflet": "^1.9.22",
     "@vitejs/plugin-vue": "^6.0.8",
-    "geotiff": "^3.0.5",
-    "pngjs": "^7.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.9",
     "vite": "^8.2.2",

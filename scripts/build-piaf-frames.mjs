@@ -1,5 +1,5 @@
 import { mkdirSync, rmSync } from 'node:fs'
-import { buildFrame, buildRun, mfXml, resolvePrevRun, writeManifest } from './frames-lib.mjs'
+import { bail, buildFrame, buildRun, catalogRuns, resolvePrevRun, writeManifest } from './frames-lib.mjs'
 
 const API = 'https://api.meteofrance.fr/pro/piaf/1.0/wcs/MF-NWP-HIGHRES-PIAF-001-FRANCE-WCS'
 const MANIFEST_URL = 'https://raw.githubusercontent.com/jlzdev/pleutpas/piaf/manifest.json'
@@ -13,6 +13,8 @@ const PAST_COUNT = 24
 // partagee avec l'app ; grille native 0.01 deg reduite de moitie pour le poids des PNG
 const MM_SCALE = 3
 const SHRINK = 2
+// un nouveau run PIAF sort toutes les 5 min : au-dela de 45 min sans publication, vraie panne
+const MAX_AGE_MS = 45 * 60000
 
 const key = process.env.MF_API_KEY
 if (!key) {
@@ -20,26 +22,21 @@ if (!key) {
   process.exit(1)
 }
 
-const caps = await mfXml(key, API + '/GetCapabilities?service=WCS&version=2.0.1&language=eng')
-const runRe = new RegExp(FAMILY + '___(\\d{4}-\\d{2}-\\d{2}T\\d{2}\\.\\d{2}\\.\\d{2}Z)_PT5M', 'g')
-const found = [...caps.matchAll(runRe)]
-if (!found.length) {
-  console.error('aucun run PT5M dans le GetCapabilities')
-  process.exit(1)
-}
-const runs = [...new Set(found.map((m) => m[1]))].sort().reverse().slice(0, 3)
-
 const prevRun = await resolvePrevRun(MANIFEST_URL)
+const giveUp = (msg) => {
+  rmSync(OUT, { recursive: true, force: true })
+  bail(prevRun, MAX_AGE_MS, msg)
+}
+
+const runRe = new RegExp(FAMILY + '___(?<run>\\d{4}-\\d{2}-\\d{2}T\\d{2}\\.\\d{2}\\.\\d{2}Z)_PT5M', 'g')
+const { all: allRuns, runs } = await catalogRuns(key, API, runRe, giveUp)
 
 const cfg = { key, api: API, subset: SUBSET, outDir: OUT, mmScale: MM_SCALE, shrink: SHRINK }
 
 let chosen = null
 for (const runId of runs) {
   const runIso = runId.replaceAll('.', ':')
-  if (prevRun === runIso) {
-    console.log('rien de neuf, run ' + runIso + ' deja publie')
-    process.exit(0)
-  }
+  if (prevRun === runIso) giveUp('rien de neuf, run ' + runIso + ' deja publie')
   rmSync(OUT, { recursive: true, force: true })
   mkdirSync(OUT + '/frames', { recursive: true })
   const runMs = Date.parse(runIso)
@@ -53,15 +50,10 @@ for (const runId of runs) {
   break
 }
 
-if (!chosen) {
-  rmSync(OUT, { recursive: true, force: true })
-  console.error('aucun run complet parmi ' + runs.map((r) => r.replaceAll('.', ':')).join(', ') + ', publication annulee')
-  process.exit(1)
-}
+if (!chosen) giveUp('aucun run complet parmi ' + runs.map((r) => r.replaceAll('.', ':')).join(', ') + ', publication annulee')
 
 // le passe est reconstruit sans etat : la lame d'eau quasi observee de l'instant T est
 // l'echeance +5 min du run T-5, encore present au catalogue (meme palette que le futur)
-const allRuns = new Set(found.map((m) => m[1]))
 const srcRunId = (tMs) => new Date(tMs - 300000).toISOString().replace('.000', '').replaceAll(':', '.')
 const instants = Array.from({ length: PAST_COUNT }, (_, k) => chosen.runMs - k * 300000)
   .filter((t) => allRuns.has(srcRunId(t)))

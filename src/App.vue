@@ -10,6 +10,7 @@ import DayCard from './components/DayCard.vue'
 
 const settingsOpen = ref(false)
 const contact = ['contact', 'pleutpas.fr'].join('@')
+const version = __APP_VERSION__
 
 watchEffect(() => { document.title = place.value.name + ' - Pleut pas ?' })
 const updatedStale = computed(() => fetchedAt.value !== null && nowTick.value - fetchedAt.value > 10 * 60 * 1000)
@@ -37,12 +38,13 @@ const updatedText = computed(() => fetchedAt.value === null
     <DayCard />
     <div class="text-center text-xs" :class="updatedStale ? 'text-amber-500' : 'text-dim'">{{ updatedText }}</div>
   </main>
-  <footer class="mx-auto max-w-[640px] px-3.5 pb-7 text-center text-xs text-dim desk:max-w-[860px]">
+  <footer class="mx-auto max-w-[640px] px-3.5 pb-7 text-center text-[11px] leading-4 text-dim desk:max-w-[860px]">
     Prévisions <a class="underline" href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo</a>
     (<a class="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>),
     pluie dans l'heure, lame d'eau radar et prévisions PIAF / AROME-PI <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>
     (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>),
     nom du lieu <a class="underline" href="https://www.bigdatacloud.com/" target="_blank" rel="noopener">BigDataCloud</a>.
-    <span class="block pt-1">Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.</span>
+    <span class="block pt-1">Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.
+    <a class="underline" href="https://github.com/jlzdev/pleutpas/blob/main/CHANGELOG.md" target="_blank" rel="noopener">v{{ version }}</a></span>
   </footer>
 </template>
