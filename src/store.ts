@@ -1,10 +1,10 @@
 import { computed, ref } from 'vue'
-import { BESANCON, inFranceBounds, type MfEntry, type Place, type Slot } from './lib/meteo'
+import { BESANCON, inFranceBounds, WET_MM, type MfEntry, type Place, type Slot } from './lib/meteo'
 import {
   fetchFutureRain,
   fetchRain,
   fetchWeather,
-  sampleFrameWet,
+  sampleFrameMm,
   type FutureRain,
   type OpenMeteoPayload,
 } from './lib/api'
@@ -12,6 +12,7 @@ import {
 const KEY_TRIP = 'pleutpas.tripMin'
 const KEY_PLACE = 'pleutpas.place'
 const KEY_CACHE = 'pleutpas.cache'
+const KEY_BASEMAP = 'pleutpas.basemap'
 
 function lsGet(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
@@ -52,12 +53,15 @@ function loadPlace(): Place {
   return BESANCON
 }
 
+export type Basemap = 'plan' | 'velo'
+
 export const place = ref<Place>(loadPlace())
+export const basemap = ref<Basemap>(lsGet(KEY_BASEMAP) === 'velo' ? 'velo' : 'plan')
 export const tripMin = ref(loadTrip())
 export const weather = ref<OpenMeteoPayload | null>(null)
 export const fetchedAt = ref<number | null>(null)
 export const rainMF = ref<MfEntry[] | null>(null)
-export const radarWetNow = ref<boolean | null>(null)
+export const radarMmNow = ref<number | null>(null)
 export const radarPending = ref(false)
 export const futureRain = ref<FutureRain | null>(null)
 export const refreshing = ref(false)
@@ -107,24 +111,24 @@ export async function refresh(fromButton = false): Promise<void> {
   }
   rainMF.value = r.status === 'fulfilled' ? r.value : null
   const fut = await futP
-  let wet: boolean | null = null
+  let mm: number | null = null
   const past = fut?.past ?? []
   const lastPast = past[past.length - 1]
   const prevPast = past[past.length - 2]
   if (lastPast) {
     try {
-      wet = await sampleFrameWet(lastPast, p.lat, p.lon)
-      if (wet && prevPast) {
+      mm = await sampleFrameMm(lastPast, p.lat, p.lon)
+      if (mm !== null && mm >= WET_MM && prevPast) {
         // une pluie reelle persiste d'une image a l'autre, un parasite isole non
         try {
-          const confirm = await sampleFrameWet(prevPast, p.lat, p.lon)
-          if (confirm !== null) wet = confirm
+          const confirm = await sampleFrameMm(prevPast, p.lat, p.lon)
+          if (confirm !== null && confirm < WET_MM) mm = confirm
         } catch { /* confirmation impossible, on garde l'echo simple */ }
       }
     } catch { /* echantillonnage impossible, verdict sans radar */ }
   }
   if (seq !== refreshSeq) return
-  radarWetNow.value = wet
+  radarMmNow.value = mm
   radarPending.value = false
   futureRain.value = hasFuture(fut) ? fut : (hasFuture(futureRain.value) ? futureRain.value : null)
   nowTick.value = Date.now()
@@ -136,9 +140,14 @@ export function setPlace(p: Place): void {
   lsSet(KEY_PLACE, JSON.stringify(p))
   weather.value = null
   fetchedAt.value = null
-  radarWetNow.value = null
+  radarMmNow.value = null
   recenterTick.value++
   void refresh(false)
+}
+
+export function setBasemap(b: Basemap): void {
+  basemap.value = b
+  lsSet(KEY_BASEMAP, b)
 }
 
 export function setTripMin(n: number): void {
@@ -162,4 +171,4 @@ export function initStore(): void {
 declare global {
   interface Window { __pp: Record<string, unknown> }
 }
-window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarWetNow, radarPending, futureRain, slots, nowTick, refresh, setPlace }
+window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarMmNow, radarPending, futureRain, slots, nowTick, refresh, setPlace }

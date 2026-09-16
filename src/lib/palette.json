@@ -1,7 +1,8 @@
 {
   "slotMin": 15,
   "wetMm": 0.1,
-  "mfWetLevel": 2,
+  "lightMaxMm": 0.75,
+  "mfLevelMm": [0, 0, 0.25, 0.75, 2, 5],
   "steps": [
     { "mm": 0.04, "name": "traces", "hex": "#3e9c94" },
     { "mm": 0.1, "name": "bruine", "hex": "#6ee7dc" },

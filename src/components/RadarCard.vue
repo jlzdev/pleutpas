@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { futureRain, place, recenterTick } from '../store'
+import { basemap, futureRain, place, recenterTick, setBasemap } from '../store'
 import { fmtHM, FRANCE_BOUNDS } from '../lib/meteo'
+import { rainLayer, type RainLayer } from '../lib/rainLayer'
 
 interface ViewFrame {
   time: number
@@ -17,12 +18,19 @@ const playing = ref(false)
 
 let map: L.Map | null = null
 let marker: L.CircleMarker | null = null
-let layers: L.ImageOverlay[] = []
-let added: boolean[] = []
-let timer: ReturnType<typeof setTimeout> | null = null
+let layer: RainLayer | null = null
+let layerBoundsKey = ''
+let raf = 0
+let head = 0
+let headStart = 0
+let drawKey = ''
 
-const FRAME_MS = 300
-const LOOP_PAUSE_MS = 1400
+const FRAME_MS = 150
+const LOOP_PAUSE_MS = 1200
+
+const ready = new Map<string, HTMLImageElement>()
+const pending = new Set<string>()
+const failed = new Set<string>()
 
 const frames = computed<ViewFrame[]>(() => {
   const fut = futureRain.value
@@ -45,77 +53,134 @@ const note = computed(() => {
     : 'La pluie prévue jusqu\'à ' + end + '.'
 })
 
-function showFrame(i: number): void {
-  frameIdx.value = i
-  if (!map || !layers[i]) return
-  if (!added[i]) {
-    layers[i].addTo(map)
-    added[i] = true
-  }
-  layers.forEach((l, j) => l.setOpacity(j === i ? 0.85 : 0))
+function loadImage(url: string): void {
+  if (ready.has(url) || pending.has(url) || failed.has(url)) return
+  pending.add(url)
+  const img = new Image()
+  img.crossOrigin = 'anonymous'
+  img.src = url
+  img.decode()
+    .then(() => { ready.set(url, img) }, () => { failed.add(url) })
+    .finally(() => {
+      pending.delete(url)
+      if (!playing.value) paintStill(frameIdx.value)
+    })
 }
 
-function rebuildLayers(): void {
-  if (!map) return
-  layers.forEach(l => map!.removeLayer(l))
-  layers = frames.value.map(f => L.imageOverlay(f.url, f.bounds, { opacity: 0, zIndex: 5 }))
-  added = frames.value.map(() => false)
-  if (!frames.value.length) {
+function setLayerBounds(f: ViewFrame): void {
+  const key = f.bounds.join(',')
+  if (key === layerBoundsKey || !layer) return
+  layerBoundsKey = key
+  layer.setBounds(L.latLngBounds(f.bounds))
+}
+
+function sameBounds(a: ViewFrame, b: ViewFrame): boolean {
+  return a.bounds.join(',') === b.bounds.join(',')
+}
+
+function paintStill(i: number): void {
+  const f = frames.value[i]
+  if (!layer || !f) return
+  loadImage(f.url)
+  const img = ready.get(f.url)
+  if (!img) return
+  drawKey = i + ':still'
+  setLayerBounds(f)
+  layer.draw(img, null, 0)
+}
+
+function show(i: number): void {
+  frameIdx.value = i
+  head = i
+  paintStill(i)
+}
+
+function tick(ts: number): void {
+  if (!playing.value) return
+  const fs = frames.value
+  if (!fs.length) {
     stopPlay()
-    frameIdx.value = 0
     return
   }
-  const nowSec = Date.now() / 1000
-  const nearestNow = frames.value.reduce(
-    (best, f, i) => (Math.abs(f.time - nowSec) < Math.abs(frames.value[best].time - nowSec) ? i : best),
-    0,
-  )
-  showFrame(nearestNow)
+  if (head >= fs.length) head = 0
+  const wasLast = head === fs.length - 1
+  const nextIdx = wasLast ? 0 : head + 1
+  const nextUrl = fs[nextIdx].url
+  if (ts - headStart >= (wasLast ? LOOP_PAUSE_MS : FRAME_MS) && (ready.has(nextUrl) || failed.has(nextUrl))) {
+    head = nextIdx
+    headStart = ts
+  }
+  const cur = fs[head]
+  const to = head < fs.length - 1 ? fs[head + 1] : null
+  const curImg = ready.get(cur.url)
+  const toImg = to && sameBounds(cur, to) ? ready.get(to.url) : undefined
+  const mix = toImg ? Math.min(1, (ts - headStart) / FRAME_MS) : 0
+  frameIdx.value = to && mix >= 0.5 ? head + 1 : head
+  if (curImg && layer) {
+    const key = head + ':' + (toImg ? Math.round(mix * 60) : 'hold')
+    if (key !== drawKey) {
+      drawKey = key
+      setLayerBounds(cur)
+      layer.draw(curImg, toImg ?? null, mix)
+    }
+  }
+  raf = requestAnimationFrame(tick)
+}
+
+function preloadAll(): void {
+  const fs = frames.value
+  for (let k = 0; k < fs.length; k++) loadImage(fs[(head + k) % fs.length].url)
 }
 
 function stopPlay(): void {
-  if (timer) clearTimeout(timer)
-  timer = null
+  cancelAnimationFrame(raf)
   playing.value = false
-}
-
-function preloadLayers(): void {
-  if (!map) return
-  layers.forEach((l, i) => {
-    if (!added[i]) {
-      l.addTo(map!)
-      l.setOpacity(0)
-      added[i] = true
-    }
-  })
-}
-
-function scheduleNext(): void {
-  timer = setTimeout(() => {
-    if (!playing.value) return
-    if (!frames.value.length) {
-      stopPlay()
-      return
-    }
-    showFrame((frameIdx.value + 1) % frames.value.length)
-    scheduleNext()
-  }, frameIdx.value >= maxIdx.value ? LOOP_PAUSE_MS : FRAME_MS)
 }
 
 function togglePlay(): void {
   if (playing.value) {
     stopPlay()
+    show(frameIdx.value)
     return
   }
   if (!frames.value.length) return
+  head = frameIdx.value
+  headStart = performance.now()
   playing.value = true
-  preloadLayers()
-  scheduleNext()
+  preloadAll()
+  raf = requestAnimationFrame(tick)
+}
+
+function rebuild(): void {
+  const fs = frames.value
+  const keep = new Set(fs.map(f => f.url))
+  for (const url of [...ready.keys()]) {
+    if (!keep.has(url)) ready.delete(url)
+  }
+  failed.clear()
+  drawKey = ''
+  if (!fs.length) {
+    stopPlay()
+    frameIdx.value = 0
+    layer?.clear()
+    return
+  }
+  if (playing.value) {
+    head = Math.min(head, fs.length - 1)
+    preloadAll()
+    return
+  }
+  const nowSec = Date.now() / 1000
+  const nearestNow = fs.reduce(
+    (best, f, i) => (Math.abs(f.time - nowSec) < Math.abs(fs[best].time - nowSec) ? i : best),
+    0,
+  )
+  show(nearestNow)
 }
 
 function onSlide(e: Event): void {
   stopPlay()
-  showFrame(parseInt((e.target as HTMLInputElement).value, 10) || 0)
+  show(parseInt((e.target as HTMLInputElement).value, 10) || 0)
 }
 
 function onResize(): void {
@@ -132,17 +197,24 @@ onMounted(() => {
     maxBoundsViscosity: 1,
   }).setView([place.value.lat, place.value.lon], 8)
   L.control.zoom({ position: 'topright' }).addTo(map)
-  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 12, attribution: '© OpenStreetMap | Météo-France',
-  }).addTo(map)
+  })
+  const velo = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
+    maxZoom: 12, attribution: '<a href="https://www.cyclosm.org/">CyclOSM</a> | © OpenStreetMap | Météo-France',
+  })
+  ;(basemap.value === 'velo' ? velo : plan).addTo(map)
+  L.control.layers({ 'Plan': plan, 'Vélo (CyclOSM)': velo }, undefined, { position: 'topright' }).addTo(map)
+  map.on('baselayerchange', (e: L.LayersControlEvent) => setBasemap(e.layer === velo ? 'velo' : 'plan'))
+  layer = rainLayer(FRANCE_BOUNDS, { opacity: 0.85, zIndex: 5 }).addTo(map)
   marker = L.circleMarker([place.value.lat, place.value.lon], {
     radius: 7, color: '#fff', weight: 2, fillColor: '#1d6ef2', fillOpacity: 1,
   }).addTo(map)
   window.addEventListener('resize', onResize)
-  rebuildLayers()
+  rebuild()
 })
 
-watch(futureRain, rebuildLayers)
+watch(futureRain, rebuild)
 watch(recenterTick, () => {
   map?.setView([place.value.lat, place.value.lon], 8)
   marker?.setLatLng([place.value.lat, place.value.lon])
@@ -153,6 +225,7 @@ onBeforeUnmount(() => {
   window.removeEventListener('resize', onResize)
   map?.remove()
   map = null
+  layer = null
 })
 </script>
 

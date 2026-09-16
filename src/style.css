@@ -22,11 +22,6 @@ body {
   padding-bottom: env(safe-area-inset-bottom);
 }
 
-.radar-map .leaflet-layer,
-.radar-map .leaflet-image-layer {
-  transition: opacity 200ms linear;
-}
-
 @layer components {
   .card {
     @apply rounded-2xl border border-[#223048] bg-panel p-3.5;
@@ -39,6 +34,9 @@ body {
   }
   .v-oui {
     background: linear-gradient(160deg, #16a34a, #0d7a36);
+  }
+  .v-bof {
+    background: linear-gradient(160deg, #d97706, #a85a04);
   }
   .v-non {
     background: linear-gradient(160deg, #dc2626, #a31414);
