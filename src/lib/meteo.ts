@@ -19,7 +19,7 @@ export interface MfEntry {
 }
 
 export interface VerdictView {
-  state: 'oui' | 'non' | 'inconnu'
+  state: 'oui' | 'bof' | 'non' | 'inconnu'
   big: string
   sub: string
   detail: string
@@ -27,7 +27,7 @@ export interface VerdictView {
 
 export const SLOT_MIN = palette.slotMin
 export const WET_MM = palette.wetMm
-export const MF_WET_LEVEL = palette.mfWetLevel
+export const LIGHT_MAX_MM = palette.lightMaxMm
 export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
 // bbox des frames Meteo-France (France metro et abords immediats), limite de la recherche,
 // de la geolocalisation et du deplacement de la carte
@@ -40,6 +40,7 @@ export function inFranceBounds(lat: number, lon: number): boolean {
 
 const STALE_MS = 60 * 60 * 1000
 export const STEP_5MIN_MS = 5 * 60 * 1000
+const LEGERE_MM = palette.steps.find((s) => s.name === 'legere')?.mm ?? LIGHT_MAX_MM
 
 // forme francaise collee ("4h15", "23h"), le format 4:15 est un anglicisme
 export function fmtHM(t: number | Date): string {
@@ -90,19 +91,40 @@ function slotAt(slots: Slot[], tMs: number): Slot | null {
   return i >= 0 && i < slots.length ? slots[i] : null
 }
 
-function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean | null {
+// niveaux MF pluie dans l'heure (1 sec, 2 faible, 3 moderee, 4 forte) ramenes a l'echelle
+// mm / 15 min de la palette, seule unite du verdict et de la timeline
+export function mfLevelMm(level: number): number {
+  const table = palette.mfLevelMm
+  return table[Math.max(0, Math.min(level, table.length - 1))]
+}
+
+function mmAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): number | null {
   const e = mfEntryAt(mf, tMs)
-  if (e) return e.level >= MF_WET_LEVEL
+  if (e) return mfLevelMm(e.level)
   const s = slotAt(slots, tMs)
-  return s ? s.mm >= WET_MM : null
+  return s ? s.mm : null
+}
+
+function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean | null {
+  const mm = mmAtMs(slots, mf, tMs)
+  return mm === null ? null : mm >= WET_MM
+}
+
+function maxMmWindow(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): number | null {
+  const endMs = startMs + durMin * 60000
+  let max = 0
+  for (let t = startMs; t < endMs; t += STEP_5MIN_MS) {
+    const mm = mmAtMs(slots, mf, t)
+    if (mm === null) return null
+    max = Math.max(max, mm)
+  }
+  const last = mmAtMs(slots, mf, endMs - 1)
+  return last === null ? null : Math.max(max, last)
 }
 
 function isDryWindowMs(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): boolean {
-  const endMs = startMs + durMin * 60000
-  for (let t = startMs; t < endMs; t += STEP_5MIN_MS) {
-    if (wetAtMs(slots, mf, t) !== false) return false
-  }
-  return wetAtMs(slots, mf, endMs - 1) === false
+  const mm = maxMmWindow(slots, mf, startMs, durMin)
+  return mm !== null && mm < WET_MM
 }
 
 function next5min(t: number): number {
@@ -133,10 +155,8 @@ export function intensityColor(mm15: number): string | null {
   return name ? 'var(--color-' + name + ')' : null
 }
 
-export function mfLevelColor(level: number): string {
-  if (level < MF_WET_LEVEL) return 'var(--color-line)'
-  const names: Record<number, string> = { 2: 'legere', 3: 'modere', 4: 'fort' }
-  return 'var(--color-' + (names[level] ?? 'tresfort') + ')'
+function lightWord(mm15: number): string {
+  return mm15 < LEGERE_MM ? 'Bruine' : 'Pluie faible'
 }
 
 export interface TimelineCell {
@@ -156,8 +176,8 @@ export function timelineCells(slots: Slot[], mf: MfEntry[] | null, nowMs: number
     const t = firstMs + i * STEP_5MIN_MS
     const e = mfEntryAt(mf, t)
     if (e) {
-      const wet = e.level >= MF_WET_LEVEL
-      cells.push({ start: t, wet, color: wet ? mfLevelColor(e.level) : null, title: fmtHM(t) + ' : ' + e.desc })
+      const mm = mfLevelMm(e.level)
+      cells.push({ start: t, wet: mm >= WET_MM, color: intensityColor(mm), title: fmtHM(t) + ' : ' + e.desc })
       continue
     }
     const s = slotAt(slots, t)
@@ -205,7 +225,7 @@ export function dayCells(slots: Slot[], nowMs: number): DayCell[] {
 export function computeVerdict(
   slots: Slot[],
   mf: MfEntry[] | null,
-  radarWetNow: boolean | null,
+  radarMmNow: number | null,
   tripMin: number,
   nowMs: number,
   fetchedAtMs: number | null,
@@ -226,10 +246,10 @@ export function computeVerdict(
   // Le premier pas MF demarre au prochain multiple de 5 min, d'ou la tolerance en amont
   const mfCoversNow = !!mf && mf.length > 0
     && nowMs >= mf[0].start - 2 * STEP_5MIN_MS && nowMs < mf[mf.length - 1].end
-  const radarNow = mfCoversNow ? null : radarWetNow
-  const forecastDry = isDryWindowMs(slots, mf, nowMs, tripMin)
-  const dry = forecastDry && radarNow !== true
-  if (dry) {
+  const radarMm = mfCoversNow ? null : radarMmNow
+  const tripMm = maxMmWindow(slots, mf, nowMs, tripMin)
+  const worstMm = tripMm === null ? null : Math.max(tripMm, radarMm ?? 0)
+  if (worstMm !== null && worstMm < WET_MM) {
     const wetT = firstWetMs(slots, mf, nowMs)
     return {
       state: 'oui',
@@ -240,25 +260,38 @@ export function computeVerdict(
         : 'Sec jusqu\'à ' + fmtDayHM(wetT, nowMs) + ' environ.',
     }
   }
-  if (forecastDry) {
+  const nowMm = Math.max(mmAtMs(slots, mf, nowMs) ?? 0, radarMm ?? 0)
+  const rainingNow = nowMm >= WET_MM
+  const wetT = firstWetMs(slots, mf, nowMs)
+  const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
+  const noDryWindow = 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
+  // bruine ou pluie faible seulement sur le trajet : ca se roule avec une veste, le
+  // NON est reserve a la vraie pluie
+  const radarOnly = tripMm !== null && tripMm < WET_MM
+  const unforeseen = 'Averse non prévue, reviens voir quand elle passe.'
+  if (worstMm !== null && worstMm < LIGHT_MAX_MM) {
+    const word = lightWord(rainingNow ? nowMm : worstMm)
+    return {
+      state: 'bof',
+      big: 'OUI',
+      sub: rainingNow || wetT < 0
+        ? word + ' en ce moment, sors la veste'
+        : word + ' prévue vers ' + fmtDayHM(wetT, nowMs) + ', sors la veste',
+      detail: radarOnly ? unforeseen
+        : depMs < 0 ? noDryWindow : 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
+    }
+  }
+  if (radarOnly) {
     return {
       state: 'non',
       big: 'NON',
       sub: 'Il pleut en ce moment (vu au radar)',
-      detail: 'Averse non prévue, reviens voir quand elle passe.',
+      detail: unforeseen,
     }
   }
-  const rainingNow = wetAtMs(slots, mf, nowMs) === true || radarNow === true
-  const wetT = firstWetMs(slots, mf, nowMs)
   const sub = rainingNow || wetT < 0 ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtDayHM(wetT, nowMs)
-  const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
   if (depMs < 0) {
-    return {
-      state: 'non',
-      big: 'NON',
-      sub,
-      detail: 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).',
-    }
+    return { state: 'non', big: 'NON', sub, detail: noDryWindow }
   }
   return {
     state: 'non',

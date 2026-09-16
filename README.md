@@ -21,7 +21,9 @@ Trois familles de sources, par ordre d'autorité sur le verdict :
 3. Open-Meteo (minutely_15 et hourly) : au-delà de l'heure couverte par Météo-France,
    et pour la suite de la journée.
 
-Le nom du lieu après géolocalisation vient du géocodage inverse BigDataCloud.
+La recherche de lieu interroge le géocodage de la Géoplateforme (Base Adresse Nationale,
+communes seulement, département affiché entre parenthèses) ; après géolocalisation, la
+commune vient de l'API Découpage administratif (geo.api.gouv.fr).
 
 ## Architecture
 
@@ -55,4 +57,7 @@ Le site est déployé sur GitHub Pages à chaque tag `vX.Y.Z` (workflow
 
 Prévisions [Open-Meteo](https://open-meteo.com/) (CC-BY 4.0), pluie dans l'heure,
 lame d'eau et prévisions PIAF / AROME-PI [Météo-France](https://meteofrance.com/)
-(Licence Ouverte), géocodage inverse [BigDataCloud](https://www.bigdatacloud.com/).
+(Licence Ouverte), lieux [Base Adresse Nationale](https://adresse.data.gouv.fr/) et
+[API Découpage administratif](https://geo.api.gouv.fr/decoupage-administratif) (Licence
+Ouverte), fonds de carte [OpenStreetMap](https://www.openstreetmap.org/) et
+[CyclOSM](https://www.cyclosm.org/).

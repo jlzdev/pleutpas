@@ -6,6 +6,25 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.1.0] - 2026-09-16
+
+### Fonctionnalités
+
+- Verdict nuancé : la bruine ou la pluie faible seule sur le trajet donne un OUI orange
+  "sors la veste" avec l'heure du prochain départ au sec, le NON est réservé à la vraie
+  pluie (à partir de 0,75 mm / 15 min, niveau "modérée" de Météo-France).
+- Fond de carte vélo CyclOSM en option (sélecteur de calques sur la carte, choix mémorisé),
+  en plus du plan OpenStreetMap.
+
+### Améliorations
+
+- Recherche de lieu via le géocodage de la Géoplateforme (Base Adresse Nationale) : communes
+  françaises avec le département entre parenthèses, à la place des régions Open-Meteo.
+  La commune après géolocalisation vient de geo.api.gouv.fr (fiable en pleine campagne).
+- Animation de la carte plus rapide (150 ms par image) et sans scintillement : les images
+  sont décodées avant d'être affichées, dessinées sur un seul canvas, et s'enchaînent en
+  fondu.
+
 ## [1.0.0] - 2026-08-29
 
 Première version publiée.

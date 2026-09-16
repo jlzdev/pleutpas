@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fetchedAt, nowTick, radarPending, radarWetNow, rainMF, refreshing, slots, tripMin, weather } from '../store'
+import { fetchedAt, nowTick, radarPending, radarMmNow, rainMF, refreshing, slots, tripMin, weather } from '../store'
 import { computeVerdict, fmtHM, type VerdictView } from '../lib/meteo'
 
 const verdict = computed<VerdictView>(() => {
@@ -9,17 +9,17 @@ const verdict = computed<VerdictView>(() => {
       ? { state: 'inconnu', big: '...', sub: 'Chargement', detail: '' }
       : { state: 'inconnu', big: '?', sub: 'Météo injoignable', detail: 'Vérifie ta connexion puis actualise.' }
   }
-  if (radarPending.value && radarWetNow.value === null) {
+  if (radarPending.value && radarMmNow.value === null) {
     return { state: 'inconnu', big: '...', sub: 'Vérification du radar', detail: '' }
   }
-  return computeVerdict(slots.value, rainMF.value, radarWetNow.value, tripMin.value, nowTick.value, fetchedAt.value)
+  return computeVerdict(slots.value, rainMF.value, radarMmNow.value, tripMin.value, nowTick.value, fetchedAt.value)
 })
 </script>
 
 <template>
   <section
     class="rounded-2xl px-3.5 py-5 text-center text-white transition-colors"
-    :class="{ 'v-oui': verdict.state === 'oui', 'v-non': verdict.state === 'non', 'v-inconnu': verdict.state === 'inconnu' }"
+    :class="{ 'v-oui': verdict.state === 'oui', 'v-bof': verdict.state === 'bof', 'v-non': verdict.state === 'non', 'v-inconnu': verdict.state === 'inconnu' }"
   >
     <div class="text-[clamp(52px,17vw,84px)] font-extrabold leading-none tracking-wide desk:text-[100px]">{{ verdict.big }}</div>
     <div class="mt-2 text-lg font-semibold desk:text-[22px]">{{ verdict.sub }}</div>

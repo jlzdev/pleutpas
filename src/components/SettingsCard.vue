@@ -44,7 +44,11 @@ let searchSeq = 0
 
 async function search(): Promise<void> {
   const q = query.value.trim()
-  if (q.length < 2) return
+  if (q.length < 3) {
+    results.value = []
+    message.value = 'Tape au moins 3 lettres.'
+    return
+  }
   const seq = ++searchSeq
   message.value = 'Recherche...'
   results.value = []
@@ -60,15 +64,14 @@ async function search(): Promise<void> {
 }
 
 function label(r: GeoResult): string {
-  const region = [r.admin1, r.country].filter(Boolean).join(', ')
-  return r.name + (region ? ' (' + region + ')' : '')
+  return r.name + (r.area ? ' (' + r.area + ')' : '')
 }
 
 function pick(r: GeoResult): void {
   results.value = []
   query.value = ''
   message.value = ''
-  setPlace({ name: r.name, lat: r.latitude, lon: r.longitude })
+  setPlace({ name: r.name, lat: r.lat, lon: r.lon })
 }
 </script>
 
@@ -93,7 +96,7 @@ function pick(r: GeoResult): void {
     >{{ locating ? 'Localisation...' : 'Utiliser ma position' }}</button>
     <div class="mt-2 flex flex-col gap-1.5">
       <button
-        v-for="r in results" :key="r.latitude + '/' + r.longitude"
+        v-for="r in results" :key="r.lat + '/' + r.lon"
         class="cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-left text-sm active:bg-line"
         @click="pick(r)"
       >{{ label(r) }}</button>

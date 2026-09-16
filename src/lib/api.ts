@@ -21,10 +21,9 @@ export interface FutureRain {
 
 export interface GeoResult {
   name: string
-  latitude: number
-  longitude: number
-  admin1?: string
-  country?: string
+  lat: number
+  lon: number
+  area: string
 }
 
 // endpoint de l'app mobile Meteo-France, token public partage (non officiel, peut casser sans preavis)
@@ -101,16 +100,17 @@ export async function fetchFutureRain(): Promise<FutureRain | null> {
   }
 }
 
-const WET_COLORS = palette.steps
-  .filter((s) => s.mm >= palette.wetMm)
-  .map((s) => [parseInt(s.hex.slice(1, 3), 16), parseInt(s.hex.slice(3, 5), 16), parseInt(s.hex.slice(5, 7), 16)])
+const STEP_COLORS = palette.steps.map((s) => ({
+  mm: s.mm,
+  rgb: [parseInt(s.hex.slice(1, 3), 16), parseInt(s.hex.slice(3, 5), 16), parseInt(s.hex.slice(5, 7), 16)],
+}))
 
 const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
 
 // echantillonne une frame lame d'eau PIAF (PNG de la branche piaf, lignes reechantillonnees
-// en Mercator) au-dessus du lieu : fenetre 3x3 px (~5 km), mouille si un pixel porte une
-// couleur de la palette au niveau bruine ou plus (les traces restent sous le seuil verdict)
-export async function sampleFrameWet(frame: FutureFrame, lat: number, lon: number): Promise<boolean | null> {
+// en Mercator) au-dessus du lieu : fenetre 3x3 px (~5 km), renvoie l'intensite la plus
+// forte trouvee (mm / 15 min de la palette, 0 si aucun pixel colore), null hors de la frame
+export async function sampleFrameMm(frame: FutureFrame, lat: number, lon: number): Promise<number | null> {
   const [[south, west], [north, east]] = frame.bounds
   if (lat <= south || lat >= north || lon <= west || lon >= east) return null
   const res = await fetch(frame.url)
@@ -127,29 +127,43 @@ export async function sampleFrameWet(frame: FutureFrame, lat: number, lon: numbe
   const x0 = Math.max(0, x - 1)
   const y0 = Math.max(0, y - 1)
   const img = ctx.getImageData(x0, y0, Math.min(bmp.width - 1, x + 1) - x0 + 1, Math.min(bmp.height - 1, y + 1) - y0 + 1)
+  let max = 0
   for (let i = 0; i < img.data.length; i += 4) {
-    if (img.data[i + 3] === 255
-      && WET_COLORS.some((c) => c[0] === img.data[i] && c[1] === img.data[i + 1] && c[2] === img.data[i + 2])) {
-      return true
-    }
+    if (img.data[i + 3] !== 255) continue
+    const step = STEP_COLORS.find((c) => c.rgb[0] === img.data[i] && c.rgb[1] === img.data[i + 1] && c.rgb[2] === img.data[i + 2])
+    if (step && step.mm > max) max = step.mm
   }
-  return false
+  return max
 }
 
+// commune contenant le point (API Decoupage administratif, polygone), fiable meme en
+// pleine campagne la ou le geocodage inverse par adresse ne renvoie rien
 export async function reverseGeocodeName(lat: number, lon: number): Promise<string | null> {
-  const res = await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=' + lat
-    + '&longitude=' + lon + '&localityLanguage=fr')
-  if (!res.ok) throw new Error('reverse-geocode http ' + res.status)
-  const data = await res.json()
-  return data.city || data.locality || null
+  const res = await fetch('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=nom')
+  if (!res.ok) throw new Error('communes http ' + res.status)
+  const data: { nom?: string }[] = await res.json()
+  return data[0]?.nom ?? null
 }
 
+interface BanFeature {
+  geometry: { coordinates: [number, number] }
+  properties: { label: string; context?: string }
+}
+
+// geocodage Geoplateforme (Base Adresse Nationale, successeur d'api-adresse.data.gouv.fr),
+// communes seulement ; le departement vient du champ context "70, Haute-Saone, Bourgogne..."
 export async function searchPlaces(q: string): Promise<GeoResult[]> {
-  const res = await fetch('https://geocoding-api.open-meteo.com/v1/search?name='
-    + encodeURIComponent(q) + '&count=20&language=fr&format=json')
-  if (!res.ok) throw new Error('geocoding http ' + res.status)
+  const res = await fetch('https://data.geopf.fr/geocodage/search?q=' + encodeURIComponent(q)
+    + '&index=address&type=municipality&limit=20')
+  if (!res.ok) throw new Error('geocodage http ' + res.status)
   const data = await res.json()
-  return ((data.results || []) as GeoResult[])
-    .filter((r) => inFranceBounds(r.latitude, r.longitude))
+  return ((data.features || []) as BanFeature[])
+    .map((f) => ({
+      name: f.properties.label,
+      lon: f.geometry.coordinates[0],
+      lat: f.geometry.coordinates[1],
+      area: (f.properties.context ?? '').split(', ')[1] ?? '',
+    }))
+    .filter((r) => inFranceBounds(r.lat, r.lon))
     .slice(0, 5)
 }

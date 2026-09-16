@@ -43,7 +43,10 @@ const updatedText = computed(() => fetchedAt.value === null
     (<a class="underline" href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC-BY 4.0</a>),
     pluie dans l'heure, lame d'eau radar et prévisions PIAF / AROME-PI <a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener">Météo-France</a>
     (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>),
-    nom du lieu <a class="underline" href="https://www.bigdatacloud.com/" target="_blank" rel="noopener">BigDataCloud</a>.
+    lieux <a class="underline" href="https://adresse.data.gouv.fr/" target="_blank" rel="noopener">Base Adresse Nationale</a>
+    et <a class="underline" href="https://geo.api.gouv.fr/decoupage-administratif" target="_blank" rel="noopener">découpage administratif</a> (Licence Ouverte),
+    fonds de carte <a class="underline" href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a>
+    et <a class="underline" href="https://www.cyclosm.org/" target="_blank" rel="noopener">CyclOSM</a>.
     <span class="block pt-1">Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.
     <a class="underline" href="https://github.com/jlzdev/pleutpas/blob/main/CHANGELOG.md" target="_blank" rel="noopener">v{{ version }}</a></span>
   </footer>
