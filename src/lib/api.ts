@@ -1,5 +1,5 @@
 import palette from './palette.json'
-import { inFranceBounds, type MfEntry, type Place } from './meteo'
+import { cleanName, FRANCE_BOUNDS, inFranceBounds, type MfEntry, type Place } from './meteo'
 
 export interface OpenMeteoPayload {
   minutely_15: { time: number[]; precipitation: (number | null)[] }
@@ -136,13 +136,52 @@ export async function sampleFrameMm(frame: FutureFrame, lat: number, lon: number
   return max
 }
 
+const PHOTON = 'https://photon.komoot.io'
+// un geocodeur qui traine ne doit pas retenir les resultats de l'autre : 6 s au plus,
+// et 1,5 s de grace une fois que le premier a repondu
+const GEO_TIMEOUT_MS = 6000
+const GEO_GRACE_MS = 1500
+const geoFetch = (url: string) => fetch(url, { signal: AbortSignal.timeout(GEO_TIMEOUT_MS) })
+
+async function settleWithGrace<T>(ps: Promise<T>[], graceMs: number): Promise<PromiseSettledResult<T>[]> {
+  const wrapped = ps.map((p): Promise<PromiseSettledResult<T>> => p.then(
+    (value) => ({ status: 'fulfilled', value }),
+    (reason) => ({ status: 'rejected', reason }),
+  ))
+  await Promise.race(wrapped)
+  const late = new Promise<PromiseSettledResult<T>>((resolve) =>
+    setTimeout(() => resolve({ status: 'rejected', reason: new Error('geocodeur trop lent') }), graceMs))
+  return Promise.all(wrapped.map((w) => Promise.race([w, late])))
+}
+const PHOTON_BBOX = [FRANCE_BOUNDS[0][1], FRANCE_BOUNDS[0][0], FRANCE_BOUNDS[1][1], FRANCE_BOUNDS[1][0]].join(',')
+
+interface PhotonFeature {
+  geometry: { coordinates: [number, number] }
+  properties: { name?: string; city?: string; county?: string; country?: string; countrycode?: string }
+}
+
+type PhotonResult = GeoResult & { fr: boolean }
+
 // commune contenant le point (API Decoupage administratif, polygone), fiable meme en
 // pleine campagne la ou le geocodage inverse par adresse ne renvoie rien
-export async function reverseGeocodeName(lat: number, lon: number): Promise<string | null> {
-  const res = await fetch('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=nom')
+async function communeName(lat: number, lon: number): Promise<string | null> {
+  const res = await geoFetch('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=nom')
   if (!res.ok) throw new Error('communes http ' + res.status)
   const data: { nom?: string }[] = await res.json()
   return data[0]?.nom ?? null
+}
+
+async function photonName(lat: number, lon: number): Promise<string | null> {
+  const res = await geoFetch(PHOTON + '/reverse?lat=' + lat + '&lon=' + lon + '&lang=fr')
+  if (!res.ok) throw new Error('photon http ' + res.status)
+  const data = await res.json()
+  const p = ((data.features || []) as PhotonFeature[])[0]?.properties
+  return cleanName(p?.city ?? p?.name) || null
+}
+
+export async function reverseGeocodeName(lat: number, lon: number): Promise<string | null> {
+  const name = await communeName(lat, lon).catch(() => null)
+  return name ?? photonName(lat, lon)
 }
 
 interface BanFeature {
@@ -152,18 +191,53 @@ interface BanFeature {
 
 // geocodage Geoplateforme (Base Adresse Nationale, successeur d'api-adresse.data.gouv.fr),
 // communes seulement ; le departement vient du champ context "70, Haute-Saone, Bourgogne..."
-export async function searchPlaces(q: string): Promise<GeoResult[]> {
-  const res = await fetch('https://data.geopf.fr/geocodage/search?q=' + encodeURIComponent(q)
+async function searchBan(q: string): Promise<GeoResult[]> {
+  const res = await geoFetch('https://data.geopf.fr/geocodage/search?q=' + encodeURIComponent(q)
     + '&index=address&type=municipality&limit=20')
   if (!res.ok) throw new Error('geocodage http ' + res.status)
   const data = await res.json()
-  return ((data.features || []) as BanFeature[])
-    .map((f) => ({
-      name: f.properties.label,
-      lon: f.geometry.coordinates[0],
-      lat: f.geometry.coordinates[1],
-      area: (f.properties.context ?? '').split(', ')[1] ?? '',
-    }))
-    .filter((r) => inFranceBounds(r.lat, r.lon))
-    .slice(0, 5)
+  return ((data.features || []) as BanFeature[]).map((f) => ({
+    name: cleanName(f.properties.label),
+    lon: f.geometry.coordinates[0],
+    lat: f.geometry.coordinates[1],
+    area: (f.properties.context ?? '').split(', ')[1] ?? '',
+  }))
+}
+
+// communes de toute l'emprise des frames (Photon, donnees OpenStreetMap) : pays entre
+// parentheses hors de France, departement (county) en France ou Photon ne sert que de
+// secours quand la BAN est muette
+async function searchPhoton(q: string): Promise<PhotonResult[]> {
+  const res = await geoFetch(PHOTON + '/api/?q=' + encodeURIComponent(q)
+    + '&lang=fr&limit=10&layer=city&bbox=' + PHOTON_BBOX)
+  if (!res.ok) throw new Error('photon http ' + res.status)
+  const data = await res.json()
+  const seen = new Set<string>()
+  const out: PhotonResult[] = []
+  for (const f of (data.features || []) as PhotonFeature[]) {
+    const fr = f.properties.countrycode === 'FR'
+    const name = cleanName(f.properties.name)
+    const area = cleanName(fr ? f.properties.county : f.properties.country)
+    if (!name || seen.has(name + '|' + area)) continue
+    seen.add(name + '|' + area)
+    out.push({ name, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], area, fr })
+  }
+  return out
+}
+
+const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+
+// la BAN complete par prefixe jusqu'a 20 communes : sans priorite au nom exact, "Gand"
+// (Belgique) serait chasse des 5 places par Gandrange, Gandelu...
+export async function searchPlaces(q: string): Promise<GeoResult[]> {
+  const [ban, photon] = await settleWithGrace<GeoResult[] | PhotonResult[]>([searchBan(q), searchPhoton(q)], GEO_GRACE_MS)
+  if (ban.status === 'rejected' && photon.status === 'rejected') throw ban.reason
+  const banList = ban.status === 'fulfilled' ? ban.value : []
+  const photonList = (photon.status === 'fulfilled' ? photon.value as PhotonResult[] : [])
+    .filter((r) => ban.status === 'rejected' || !r.fr)
+    .map(({ name, lat, lon, area }) => ({ name, lat, lon, area }))
+  const found = [...banList, ...photonList].filter((r) => r.name && inFranceBounds(r.lat, r.lon))
+  const wanted = fold(q.trim())
+  const exact = found.filter((r) => fold(r.name) === wanted)
+  return [...exact, ...found.filter((r) => !exact.includes(r))].slice(0, 5)
 }

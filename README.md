@@ -4,7 +4,10 @@ Est-ce que je peux prendre mon vélo maintenant, et sinon à quelle heure ? Gros
 OUI / NON selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
 heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée.
 Lieu configurable (recherche de ville, géolocalisation ou URL), Besançon par défaut,
-zone couverte : France métropolitaine.
+zone couverte : France métropolitaine et pays voisins jusqu'aux bords des grilles Météo-France
+(Belgique, Luxembourg, Suisse, sud-ouest de l'Allemagne, nord de l'Italie, Catalogne, sud de
+l'Angleterre). Hors de France, la source "pluie dans l'heure" est muette et le verdict repose
+sur PIAF et Open-Meteo.
 
 Site 100 % statique, en ligne sur https://pleutpas.fr
 
@@ -22,8 +25,14 @@ Trois familles de sources, par ordre d'autorité sur le verdict :
    et pour la suite de la journée.
 
 La recherche de lieu interroge le géocodage de la Géoplateforme (Base Adresse Nationale,
-communes seulement, département affiché entre parenthèses) ; après géolocalisation, la
-commune vient de l'API Découpage administratif (geo.api.gouv.fr).
+communes seulement, département affiché entre parenthèses) et, pour les pays voisins,
+Photon (komoot, données OpenStreetMap, pays affiché entre parenthèses) ; après
+géolocalisation, la commune vient de l'API Découpage administratif (geo.api.gouv.fr), puis
+de Photon hors de France.
+
+Le site est une PWA installable (bandeau "Ajoute Pleut pas ? à ton écran d'accueil" à la
+première visite) et propose un rappel quotidien sous forme de fichier .ics à ajouter à son
+agenda, sans serveur ni notification push.
 
 ## Architecture
 
@@ -59,5 +68,6 @@ Prévisions [Open-Meteo](https://open-meteo.com/) (CC-BY 4.0), pluie dans l'heur
 lame d'eau et prévisions PIAF / AROME-PI [Météo-France](https://meteofrance.com/)
 (Licence Ouverte), lieux [Base Adresse Nationale](https://adresse.data.gouv.fr/) et
 [API Découpage administratif](https://geo.api.gouv.fr/decoupage-administratif) (Licence
-Ouverte), fonds de carte [OpenStreetMap](https://www.openstreetmap.org/) et
+Ouverte), hors de France [Photon](https://photon.komoot.io/) (données OpenStreetMap, ODbL),
+fonds de carte [OpenStreetMap](https://www.openstreetmap.org/) et
 [CyclOSM](https://www.cyclosm.org/).

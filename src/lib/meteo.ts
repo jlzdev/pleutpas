@@ -33,6 +33,11 @@ export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
 // de la geolocalisation et du deplacement de la carte
 export const FRANCE_BOUNDS: [[number, number], [number, number]] = [[41, -5.5], [51.5, 10]]
 
+export function cleanName(v: unknown): string {
+  if (typeof v !== 'string') return ''
+  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40)
+}
+
 export function inFranceBounds(lat: number, lon: number): boolean {
   const [[south, west], [north, east]] = FRANCE_BOUNDS
   return lat >= south && lat <= north && lon >= west && lon <= east

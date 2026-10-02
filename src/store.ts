@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
-import { BESANCON, inFranceBounds, WET_MM, type MfEntry, type Place, type Slot } from './lib/meteo'
+import { BESANCON, cleanName, inFranceBounds, WET_MM, type MfEntry, type Place, type Slot } from './lib/meteo'
+import { parseHHMM } from './lib/ics'
 import {
   fetchFutureRain,
   fetchRain,
@@ -13,23 +14,19 @@ const KEY_TRIP = 'pleutpas.tripMin'
 const KEY_PLACE = 'pleutpas.place'
 const KEY_CACHE = 'pleutpas.cache'
 const KEY_BASEMAP = 'pleutpas.basemap'
+const KEY_REMINDER = 'pleutpas.reminderTime'
 
-function lsGet(key: string): string | null {
+export function lsGet(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
 }
 
-function lsSet(key: string, value: string): void {
+export function lsSet(key: string, value: string): void {
   try { localStorage.setItem(key, value) } catch { /* stockage indisponible */ }
 }
 
 function loadTrip(): number {
   const v = parseInt(lsGet(KEY_TRIP) ?? '', 10) || 15
   return Math.min(60, Math.max(5, v))
-}
-
-function cleanName(v: unknown): string {
-  if (typeof v !== 'string') return ''
-  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40)
 }
 
 function loadPlace(): Place {
@@ -58,6 +55,7 @@ export type Basemap = 'plan' | 'velo'
 export const place = ref<Place>(loadPlace())
 export const basemap = ref<Basemap>(lsGet(KEY_BASEMAP) === 'velo' ? 'velo' : 'plan')
 export const tripMin = ref(loadTrip())
+export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? lsGet(KEY_REMINDER) as string : '08:00')
 export const weather = ref<OpenMeteoPayload | null>(null)
 export const fetchedAt = ref<number | null>(null)
 export const rainMF = ref<MfEntry[] | null>(null)
@@ -153,6 +151,12 @@ export function setBasemap(b: Basemap): void {
 export function setTripMin(n: number): void {
   tripMin.value = n
   lsSet(KEY_TRIP, String(n))
+}
+
+export function setReminderTime(v: string): void {
+  if (!parseHHMM(v)) return
+  reminderTime.value = v
+  lsSet(KEY_REMINDER, v)
 }
 
 export function initStore(): void {

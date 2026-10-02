@@ -6,6 +6,31 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.2.0] - 2026-10-02
+
+### Fonctionnalités
+
+- Bandeau d'installation : à la première visite hors application installée, le site propose
+  de l'ajouter à l'écran d'accueil (bouton "Installer" sur Android, consigne Partager puis
+  "Sur l'écran d'accueil" sur iPhone). Fermable, ne revient pas une fois fermé.
+- Recherche de lieu dans les pays voisins couverts par les grilles Météo-France (Belgique,
+  Luxembourg, Suisse, Allemagne du sud-ouest, nord de l'Italie, Catalogne, sud de
+  l'Angleterre), avec le pays entre parenthèses. La géolocalisation hors de France nomme
+  désormais la commune au lieu de "Ma position".
+- Rappel avant le départ : dans les réglages, une heure de départ et un bouton "Ajouter à mon
+  agenda" génèrent un fichier .ics (du lundi au vendredi, 15 min avant, lien vers la météo
+  du lieu). Sans serveur, c'est l'agenda du téléphone qui notifie.
+
+### Améliorations
+
+- Le bouton "Chercher" affiche un anneau qui tourne pendant la recherche de lieu (deux
+  services interrogés, le "Recherche..." sous le champ passait inaperçu).
+- Recherche de lieu tolérante aux lenteurs : 6 s au plus par service, et 1,5 s de grâce pour
+  le second dès que le premier a répondu. Si la Base Adresse Nationale ne répond pas à
+  temps, les communes françaises viennent de Photon (avec leur département).
+- Dans les résultats, les communes dont le nom correspond exactement à la recherche passent
+  en tête ("Gand" en Belgique avant Gandrange, Gandelu...).
+
 ## [1.1.0] - 2026-09-16
 
 ### Fonctionnalités

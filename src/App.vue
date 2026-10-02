@@ -7,6 +7,7 @@ import SettingsCard from './components/SettingsCard.vue'
 import TimelineCard from './components/TimelineCard.vue'
 import RadarCard from './components/RadarCard.vue'
 import DayCard from './components/DayCard.vue'
+import InstallBanner from './components/InstallBanner.vue'
 
 const settingsOpen = ref(false)
 const contact = ['contact', 'pleutpas.fr'].join('@')
@@ -31,6 +32,7 @@ const updatedText = computed(() => fetchedAt.value === null
     </button>
   </header>
   <main class="mx-auto flex max-w-[640px] flex-col gap-3.5 px-3.5 pb-6 pt-2.5 desk:max-w-[860px]">
+    <InstallBanner />
     <VerdictCard />
     <SettingsCard v-show="settingsOpen" />
     <TimelineCard />
@@ -45,6 +47,7 @@ const updatedText = computed(() => fetchedAt.value === null
     (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>),
     lieux <a class="underline" href="https://adresse.data.gouv.fr/" target="_blank" rel="noopener">Base Adresse Nationale</a>
     et <a class="underline" href="https://geo.api.gouv.fr/decoupage-administratif" target="_blank" rel="noopener">découpage administratif</a> (Licence Ouverte),
+    hors de France <a class="underline" href="https://photon.komoot.io/" target="_blank" rel="noopener">Photon</a> (données OpenStreetMap, ODbL),
     fonds de carte <a class="underline" href="https://www.openstreetmap.org/" target="_blank" rel="noopener">OpenStreetMap</a>
     et <a class="underline" href="https://www.cyclosm.org/" target="_blank" rel="noopener">CyclOSM</a>.
     <span class="block pt-1">Contact : <a class="underline" :href="'mailto:' + contact">{{ contact }}</a>.
