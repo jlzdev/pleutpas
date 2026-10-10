@@ -2,8 +2,8 @@
 import { computed, ref } from 'vue'
 import { place, reminderTime, setPlace, setReminderTime, setTripMin, tripMin } from '../store'
 import { reverseGeocodeName, searchPlaces, type GeoResult } from '../lib/api'
-import { fmtHM, inFranceBounds } from '../lib/meteo'
-import { buildReminderIcs, downloadIcs, REMINDER_LEAD_MIN, reminderMs } from '../lib/ics'
+import { inFranceBounds } from '../lib/meteo'
+import { buildReminderIcs, downloadIcs, REMINDER_LEAD_MIN, reminderLabel as icsLabel } from '../lib/ics'
 
 const query = ref('')
 const results = ref<GeoResult[]>([])
@@ -46,10 +46,7 @@ function onReminder(e: Event): void {
   setReminderTime((e.target as HTMLInputElement).value)
 }
 
-const reminderLabel = computed(() => {
-  const ms = reminderMs(reminderTime.value)
-  return ms === null ? '' : fmtHM(ms)
-})
+const reminderLabel = computed(() => icsLabel(reminderTime.value))
 
 function addReminder(): void {
   const ics = buildReminderIcs(place.value, reminderTime.value)

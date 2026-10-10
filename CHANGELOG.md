@@ -6,6 +6,22 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.3.1] - 2026-10-10
+
+### Améliorations
+
+- Référencement : sitemap.xml (déclaré dans robots.txt), titre et balise Open Graph plus
+  parlants ("Pleut pas ? Je peux rouler à vélo ?"), description structurée JSON-LD
+  (WebApplication) et texte de présentation visible sans JavaScript, remplacé par
+  l'application au chargement.
+- Carte "Comment ça marche" en bas de page, avant les crédits.
+- Crédits réduits à une ligne de liens (sources et licences, le détail reste dans le
+  README), adresse de contact retirée.
+- Les heures sont affichées dans le fuseau du lieu consulté (fourni par Open-Meteo) et non
+  plus dans celui de l'appareil : quelqu'un au Québec qui regarde Besançon lit désormais les
+  heures de Besançon, avec la mention "heure de Besançon" sous les données. Rien ne change
+  quand on consulte le lieu où l'on se trouve. Le rappel agenda reste à l'heure de l'appareil.
+
 ## [1.3.0] - 2026-10-10
 
 ### Améliorations

@@ -7,12 +7,12 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pleut pas ?">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Pleut pas ?</title>
+<title>Pleut pas ? Je peux rouler à vélo ? Pluie en direct et prévision</title>
 <meta name="description" content="Est-ce que je peux prendre mon vélo, et sinon à quelle heure ? Verdict immédiat : radar temps réel, pluie dans l'heure et prévision AROME Météo-France, minute par minute, en France et dans les pays voisins.">
 <link rel="canonical" href="https://pleutpas.fr/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Pleut pas ?">
-<meta property="og:title" content="Pleut pas ?">
+<meta property="og:title" content="Pleut pas ? Je peux rouler à vélo ?">
 <meta property="og:description" content="Est-ce que je peux prendre mon vélo, et sinon à quelle heure ? Verdict immédiat par radar et prévisions Météo-France.">
 <meta property="og:url" content="https://pleutpas.fr/">
 <meta property="og:image" content="https://pleutpas.fr/icons/icon-512.png">
@@ -20,9 +20,39 @@
 <meta name="twitter:card" content="summary">
 <link rel="icon" href="/icons/icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/icons/icon-maskable-192.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebApplication",
+  "name": "Pleut pas ?",
+  "alternateName": "Je peux rouler ?",
+  "url": "https://pleutpas.fr/",
+  "description": "Est-ce que je peux prendre mon vélo, et sinon à quelle heure ? Verdict immédiat selon la pluie attendue sur la durée du trajet : radar en direct, pluie dans l'heure et prévisions Météo-France et Open-Meteo, France métropolitaine et pays voisins.",
+  "applicationCategory": "WeatherApplication",
+  "operatingSystem": "Any",
+  "browserRequirements": "Requires JavaScript",
+  "inLanguage": "fr",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+  "image": "https://pleutpas.fr/icons/icon-512.png"
+}
+</script>
 </head>
 <body>
-<div id="app"></div>
+<div id="app">
+<header class="mx-auto max-w-[668px] px-3.5 pb-1 pt-3 desk:max-w-[888px] desk:pt-4">
+<h1 class="text-xl font-bold">Je peux rouler ?<small class="block text-sm font-normal text-dim">Pleut pas ?, la pluie pour les cyclistes du quotidien</small></h1>
+</header>
+<main class="mx-auto max-w-[640px] px-3.5 pt-2.5 text-sm text-dim desk:max-w-[860px]">
+<p>Pleut pas ? répond à une question simple : partir à vélo maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>
+<ul class="mt-2 list-disc pl-5">
+<li>La pluie des deux dernières heures au radar, puis la prévision minute par minute (Météo-France pluie dans l'heure, PIAF et AROME, Open-Meteo).</li>
+<li>Les deux prochaines heures en cases de cinq minutes, puis la suite de la journée heure par heure.</li>
+<li>France métropolitaine et pays voisins, choix de la ville ou géolocalisation, installable comme une application sur le téléphone.</li>
+</ul>
+<p class="mt-2">Le site a besoin de JavaScript pour afficher la météo.</p>
+</main>
+</div>
 <script type="module" src="/src/main.ts"></script>
 <script data-goatcounter="https://pleutpas.goatcounter.com/count" async src="https://gc.zgo.at/count.js"></script>
 </body>

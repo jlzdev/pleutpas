@@ -1,3 +1,4 @@
+import { ref } from 'vue'
 import palette from './palette.json'
 
 export interface Place {
@@ -47,23 +48,61 @@ const STALE_MS = 60 * 60 * 1000
 export const STEP_5MIN_MS = 5 * 60 * 1000
 const LEGERE_MM = palette.steps.find((s) => s.name === 'legere')?.mm ?? LIGHT_MAX_MM
 
+// fuseau du lieu consulte (fourni par Open-Meteo), undefined = celui de l'appareil ;
+// les heures affichees sont celles du lieu, comme sur toute app meteo
+export const displayZone = ref<string | undefined>(undefined)
+export const deviceZone = Intl.DateTimeFormat().resolvedOptions().timeZone
+
+const clockFormats = new Map<string, Intl.DateTimeFormat>()
+
+function clockFormat(): Intl.DateTimeFormat {
+  const key = displayZone.value ?? ''
+  let f = clockFormats.get(key)
+  if (!f) {
+    const opts: Intl.DateTimeFormatOptions = {
+      hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric', weekday: 'long',
+    }
+    try {
+      f = new Intl.DateTimeFormat('fr-FR', { ...opts, timeZone: displayZone.value })
+    } catch {
+      f = new Intl.DateTimeFormat('fr-FR', opts)
+    }
+    clockFormats.set(key, f)
+  }
+  return f
+}
+
+export interface ClockParts {
+  year: number
+  month: number
+  day: number
+  h: number
+  m: number
+  weekday: string
+}
+
+export function clockParts(t: number | Date): ClockParts {
+  const out: Record<string, string> = {}
+  for (const p of clockFormat().formatToParts(new Date(t))) out[p.type] = p.value
+  return {
+    year: Number(out.year), month: Number(out.month), day: Number(out.day),
+    h: Number(out.hour), m: Number(out.minute), weekday: out.weekday,
+  }
+}
+
 // forme francaise collee ("4h15", "23h"), le format 4:15 est un anglicisme
 export function fmtHM(t: number | Date): string {
-  const d = new Date(t)
-  const m = d.getMinutes()
-  return d.getHours() + 'h' + (m ? String(m).padStart(2, '0') : '')
+  const { h, m } = clockParts(t)
+  return h + 'h' + (m ? String(m).padStart(2, '0') : '')
 }
 
 export function fmtDay(tMs: number, nowMs: number): string {
-  const t = new Date(tMs)
-  const n = new Date(nowMs)
-  const days = Math.round(
-    (new Date(t.getFullYear(), t.getMonth(), t.getDate()).getTime()
-      - new Date(n.getFullYear(), n.getMonth(), n.getDate()).getTime()) / 86400000,
-  )
+  const t = clockParts(tMs)
+  const n = clockParts(nowMs)
+  const days = Math.round((Date.UTC(t.year, t.month - 1, t.day) - Date.UTC(n.year, n.month - 1, n.day)) / 86400000)
   if (days <= 0) return ''
   if (days === 1) return 'demain'
-  return t.toLocaleDateString('fr-FR', { weekday: 'long' })
+  return t.weekday
 }
 
 function fmtDayHM(tMs: number, nowMs: number): string {

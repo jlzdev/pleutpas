@@ -2,6 +2,7 @@ import palette from './palette.json'
 import { cleanName, FRANCE_BOUNDS, inFranceBounds, type MfEntry, type Place } from './meteo'
 
 export interface OpenMeteoPayload {
+  timezone?: string
   minutely_15: { time: number[]; precipitation: (number | null)[] }
   hourly: { time: number[]; precipitation: number[]; precipitation_probability: number[] }
 }

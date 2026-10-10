@@ -13,6 +13,14 @@ export function parseHHMM(v: string): [number, number] | null {
   return [h, min]
 }
 
+export function reminderLabel(hhmm: string): string {
+  const hm = parseHHMM(hhmm)
+  if (!hm) return ''
+  const total = (hm[0] * 60 + hm[1] - REMINDER_LEAD_MIN + 1440) % 1440
+  const m = total % 60
+  return Math.floor(total / 60) + 'h' + (m ? String(m).padStart(2, '0') : '')
+}
+
 export function reminderMs(hhmm: string): number | null {
   const hm = parseHHMM(hhmm)
   if (!hm) return null
