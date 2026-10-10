@@ -6,6 +6,28 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.4.0] - 2026-10-10
+
+### Nouveautés
+
+- Température, ressenti et vent du moment sur une ligne sous le verdict : "8 °C, ressenti
+  5 °C. Vent d'ouest 20 km/h, rafales 45." Le ressenti n'apparaît que s'il s'écarte de la
+  température, les rafales que si elles comptent, et "Vent fort" est mis en évidence à
+  partir de 50 km/h de rafales. Le verdict reste décidé par la pluie seule. Mêmes données
+  Open-Meteo que la pluie, aucun appel en plus.
+
+### Améliorations
+
+- Cartouche du verdict plus compact : OUI / PLUIE un peu plus petit, et la phrase "Pas de
+  pluie prévue jusqu'à ... (fin des prévisions)" disparaît, elle n'apportait rien.
+- Sous-titres sans conseil vestimentaire : "En ce moment" / "Prévue vers 8h10" sous PLUIE
+  (fini le "sors le poncho"), "Pluie faible en ce moment" / "Bruine prévue vers 8h10" sous
+  le OUI orange (fini le "sors la veste").
+- Le bouton Actualiser n'apparaît plus sur téléphone (tirer l'écran vers le bas recharge
+  la page), il reste sur ordinateur.
+- "Comment ça marche" précise que le vent est celui mesuré à 10 m en terrain dégagé, plus
+  faible en ville.
+
 ## [1.3.1] - 2026-10-10
 
 ### Améliorations

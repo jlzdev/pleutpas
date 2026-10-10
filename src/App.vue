@@ -27,7 +27,7 @@ const updatedText = computed(() => fetchedAt.value === null
       <small class="block text-sm font-normal text-dim"><span class="font-semibold text-ink">{{ place.name }}</span>, vélo boulot</small>
     </h1>
     <button class="iconbtn" aria-label="Réglages" @click="settingsOpen = !settingsOpen">⚙&#xFE0E;</button>
-    <button class="iconbtn" aria-label="Actualiser" @click="refresh(true)">
+    <button class="iconbtn hidden desk:inline-block" aria-label="Actualiser" @click="refresh(true)">
       <span class="inline-block" :class="{ 'animate-spin': refreshing }">⟳</span>
     </button>
   </header>
@@ -45,6 +45,7 @@ const updatedText = computed(() => fetchedAt.value === null
       <ul class="mt-2 list-disc pl-5">
         <li>La pluie des deux dernières heures au radar, puis la prévision minute par minute (Météo-France pluie dans l'heure, PIAF et AROME, Open-Meteo).</li>
         <li>Les deux prochaines heures en cases de cinq minutes, puis la suite de la journée heure par heure.</li>
+        <li>Température, ressenti et vent viennent d'Open-Meteo, mesurés à 10 m en terrain dégagé : en ville, entre les immeubles, le vent réel est plus faible.</li>
         <li>France métropolitaine et pays voisins, choix de la ville ou géolocalisation, installable comme une application sur le téléphone.</li>
       </ul>
     </section>
