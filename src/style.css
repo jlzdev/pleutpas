@@ -38,10 +38,26 @@ body {
   .v-bof {
     background: linear-gradient(160deg, #d97706, #a85a04);
   }
-  .v-non {
-    background: linear-gradient(160deg, #dc2626, #a31414);
+  .v-pluie {
+    background: linear-gradient(160deg, #3b82f6, #1e40af);
   }
   .v-inconnu {
     background: linear-gradient(160deg, #475569, #334155);
   }
+}
+
+.leaflet-control-layers-toggle,
+.leaflet-retina .leaflet-control-layers-toggle {
+  width: 26px;
+  height: 26px;
+  background-size: 18px 18px;
+}
+.leaflet-touch .leaflet-control-layers-toggle,
+.leaflet-touch.leaflet-retina .leaflet-control-layers-toggle {
+  width: 30px;
+  height: 30px;
+  background-size: 20px 20px;
+}
+.leaflet-control-layers {
+  border-radius: 4px;
 }

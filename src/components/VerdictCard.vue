@@ -19,7 +19,7 @@ const verdict = computed<VerdictView>(() => {
 <template>
   <section
     class="rounded-2xl px-3.5 py-5 text-center text-white transition-colors"
-    :class="{ 'v-oui': verdict.state === 'oui', 'v-bof': verdict.state === 'bof', 'v-non': verdict.state === 'non', 'v-inconnu': verdict.state === 'inconnu' }"
+    :class="{ 'v-oui': verdict.state === 'oui', 'v-bof': verdict.state === 'bof', 'v-pluie': verdict.state === 'pluie', 'v-inconnu': verdict.state === 'inconnu' }"
   >
     <div class="text-[clamp(52px,17vw,84px)] font-extrabold leading-none tracking-wide desk:text-[100px]">{{ verdict.big }}</div>
     <div class="mt-2 text-lg font-semibold desk:text-[22px]">{{ verdict.sub }}</div>

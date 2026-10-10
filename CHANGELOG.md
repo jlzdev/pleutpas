@@ -6,6 +6,17 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.3.0] - 2026-10-10
+
+### Améliorations
+
+- Le verdict "NON" sur fond rouge devient "PLUIE" sur fond bleu : la pluie est une
+  information, pas une interdiction de rouler. Même grammaire que le OUI orange : "En ce
+  moment, sors le poncho" ou "Prévue vers 8h10, sors le poncho", puis "Sinon, prochain
+  départ au sec : 8h40".
+- Sur la carte, le bouton de choix du fond (Plan / Vélo) a la même taille que les boutons
+  de zoom.
+
 ## [1.2.0] - 2026-10-02
 
 ### Fonctionnalités

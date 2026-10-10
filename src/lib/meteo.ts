@@ -19,7 +19,7 @@ export interface MfEntry {
 }
 
 export interface VerdictView {
-  state: 'oui' | 'bof' | 'non' | 'inconnu'
+  state: 'oui' | 'bof' | 'pluie' | 'inconnu'
   big: string
   sub: string
   detail: string
@@ -270,8 +270,8 @@ export function computeVerdict(
   const wetT = firstWetMs(slots, mf, nowMs)
   const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
   const noDryWindow = 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
-  // bruine ou pluie faible seulement sur le trajet : ca se roule avec une veste, le
-  // NON est reserve a la vraie pluie
+  // bruine ou pluie faible seulement sur le trajet : ca se roule avec une veste, l'etat
+  // PLUIE est reserve a la vraie pluie
   const radarOnly = tripMm !== null && tripMm < WET_MM
   const unforeseen = 'Averse non prévue, reviens voir quand elle passe.'
   if (worstMm !== null && worstMm < LIGHT_MAX_MM) {
@@ -288,20 +288,22 @@ export function computeVerdict(
   }
   if (radarOnly) {
     return {
-      state: 'non',
-      big: 'NON',
-      sub: 'Il pleut en ce moment (vu au radar)',
+      state: 'pluie',
+      big: 'PLUIE',
+      sub: 'En ce moment (vue au radar), sors le poncho',
       detail: unforeseen,
     }
   }
-  const sub = rainingNow || wetT < 0 ? 'Il pleut en ce moment' : 'Pluie prévue vers ' + fmtDayHM(wetT, nowMs)
+  const sub = rainingNow || wetT < 0
+    ? 'En ce moment, sors le poncho'
+    : 'Prévue vers ' + fmtDayHM(wetT, nowMs) + ', sors le poncho'
   if (depMs < 0) {
-    return { state: 'non', big: 'NON', sub, detail: noDryWindow }
+    return { state: 'pluie', big: 'PLUIE', sub, detail: noDryWindow }
   }
   return {
-    state: 'non',
-    big: 'NON',
+    state: 'pluie',
+    big: 'PLUIE',
     sub,
-    detail: 'Prochain départ au sec : ' + fmtDayHM(depMs, nowMs),
+    detail: 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
   }
 }
