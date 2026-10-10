@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { nowTick, slots, weather } from '../store'
-import { dayCells, fmtDay, fmtHM, intensityColor } from '../lib/meteo'
+import { clockParts, dayCells, fmtDay, fmtHM, intensityColor } from '../lib/meteo'
 
 interface HourBar {
   label: string
@@ -25,7 +25,7 @@ const bars = computed<HourBar[]>(() => {
   const h = weather.value?.hourly
   const wetIdx = cs.findIndex(c => c.wetAt !== null)
   return cs.map((c, i) => {
-    const hh = new Date(c.start).getHours()
+    const hh = clockParts(c.start).h
     const demain = hh === 0
     const hi = h ? h.time.indexOf(c.start / 1000) : -1
     const proba = hi >= 0 ? h!.precipitation_probability[hi] || 0 : 0

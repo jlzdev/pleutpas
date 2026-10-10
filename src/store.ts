@@ -1,5 +1,5 @@
 import { computed, ref } from 'vue'
-import { BESANCON, cleanName, inFranceBounds, WET_MM, type MfEntry, type Place, type Slot } from './lib/meteo'
+import { BESANCON, cleanName, displayZone, inFranceBounds, WET_MM, type MfEntry, type Place, type Slot } from './lib/meteo'
 import { parseHHMM } from './lib/ics'
 import {
   fetchFutureRain,
@@ -95,6 +95,7 @@ export async function refresh(fromButton = false): Promise<void> {
   const [w, r] = await Promise.allSettled([fetchWeather(p), fetchRain(p)])
   if (seq !== refreshSeq) return
   if (w.status === 'fulfilled') {
+    displayZone.value = w.value.timezone
     weather.value = w.value
     fetchedAt.value = Date.now()
     lsSet(KEY_CACHE, JSON.stringify({ at: fetchedAt.value, lat: p.lat, lon: p.lon, payload: w.value }))
@@ -102,6 +103,7 @@ export async function refresh(fromButton = false): Promise<void> {
     try {
       const c = JSON.parse(lsGet(KEY_CACHE) ?? 'null')
       if (c && c.payload && c.lat === p.lat && c.lon === p.lon) {
+        displayZone.value = c.payload.timezone
         weather.value = c.payload
         fetchedAt.value = c.at
       }
@@ -175,4 +177,4 @@ export function initStore(): void {
 declare global {
   interface Window { __pp: Record<string, unknown> }
 }
-window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarMmNow, radarPending, futureRain, slots, nowTick, refresh, setPlace }
+window.__pp = { place, tripMin, weather, fetchedAt, rainMF, radarMmNow, radarPending, futureRain, slots, nowTick, displayZone, refresh, setPlace }

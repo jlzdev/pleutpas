@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { nowTick, rainMF, slots } from '../store'
-import { fmtHM, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
+import { clockParts, fmtHM, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
 
 const cells = computed<TimelineCell[]>(() => timelineCells(slots.value, rainMF.value, nowTick.value))
 
@@ -29,7 +29,7 @@ const rainMarks = computed(() => {
 
 const ticks = computed(() => cells.value
   .map((c, i) => ({ start: c.start, i }))
-  .filter(({ start, i }) => i >= 2 && i <= 21 && new Date(start).getMinutes() % 30 === 0
+  .filter(({ start, i }) => i >= 2 && i <= 21 && clockParts(start).m % 30 === 0
     && !rainMarks.value.some(m => Math.abs(m.i - i) < 3))
   .map(({ start, i }) => ({ label: fmtHM(start), left: (i / cells.value.length) * 100 + '%' })))
 
