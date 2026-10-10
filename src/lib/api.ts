@@ -3,7 +3,15 @@ import { cleanName, FRANCE_BOUNDS, inFranceBounds, type MfEntry, type Place } fr
 
 export interface OpenMeteoPayload {
   timezone?: string
-  minutely_15: { time: number[]; precipitation: (number | null)[] }
+  minutely_15: {
+    time: number[]
+    precipitation: (number | null)[]
+    temperature_2m?: (number | null)[]
+    apparent_temperature?: (number | null)[]
+    wind_speed_10m?: (number | null)[]
+    wind_direction_10m?: (number | null)[]
+    wind_gusts_10m?: (number | null)[]
+  }
   hourly: { time: number[]; precipitation: number[]; precipitation_probability: number[] }
 }
 
@@ -33,7 +41,7 @@ const MF_TOKEN = '__Wj7dVSTjV9YGu1guveLyDq0g7S7TfTjaHBTPTpO0kj8__'
 export async function fetchWeather(place: Place): Promise<OpenMeteoPayload> {
   const url = 'https://api.open-meteo.com/v1/forecast'
     + '?latitude=' + place.lat + '&longitude=' + place.lon
-    + '&minutely_15=precipitation'
+    + '&minutely_15=precipitation,temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m'
     + '&hourly=precipitation,precipitation_probability'
     + '&forecast_days=2&timezone=auto&timeformat=unixtime'
   const res = await fetch(url)

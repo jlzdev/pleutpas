@@ -26,6 +26,29 @@ export interface VerdictView {
   detail: string
 }
 
+export interface ConditionSeries {
+  time: number[]
+  temperature_2m?: (number | null)[]
+  apparent_temperature?: (number | null)[]
+  wind_speed_10m?: (number | null)[]
+  wind_direction_10m?: (number | null)[]
+  wind_gusts_10m?: (number | null)[]
+}
+
+export interface Conditions {
+  tempC: number
+  feelsC: number
+  windKmh: number
+  windFrom: number
+  gustKmh: number
+}
+
+export interface ConditionsText {
+  temp: string
+  wind: string
+  strong: boolean
+}
+
 export const SLOT_MIN = palette.slotMin
 export const WET_MM = palette.wetMm
 export const LIGHT_MAX_MM = palette.lightMaxMm
@@ -115,6 +138,54 @@ export function slotIndexNow(slots: Slot[], nowMs: number): number {
     if (slots[i].start + SLOT_MIN * 60000 > nowMs) return i
   }
   return -1
+}
+
+const FEELS_DIFF_C = 2
+const CALM_KMH = 10
+const GUST_MIN_KMH = 35
+const GUST_RATIO = 1.5
+const STRONG_GUST_KMH = 50
+const WIND_FROM = ['du nord', 'de nord-est', "d'est", 'de sud-est', 'du sud', 'de sud-ouest', "d'ouest", 'de nord-ouest']
+
+export function conditionsAt(series: ConditionSeries, nowMs: number): Conditions | null {
+  const t = series.time
+  let i = -1
+  for (let k = 0; k < t.length; k++) {
+    if (t[k] * 1000 + SLOT_MIN * 60000 > nowMs) { i = k; break }
+  }
+  if (i < 0) return null
+  const tempC = series.temperature_2m?.[i]
+  const feelsC = series.apparent_temperature?.[i]
+  const windKmh = series.wind_speed_10m?.[i]
+  const windFrom = series.wind_direction_10m?.[i]
+  const gustKmh = series.wind_gusts_10m?.[i]
+  if (tempC == null || feelsC == null || windKmh == null || windFrom == null || gustKmh == null) return null
+  return { tempC, feelsC, windKmh, windFrom, gustKmh }
+}
+
+export function windWord(deg: number): string {
+  const i = Math.round((((deg % 360) + 360) % 360) / 45) % 8
+  return WIND_FROM[i]
+}
+
+function round5(v: number): number {
+  return Math.round(v / 5) * 5
+}
+
+function fmtTempC(v: number): string {
+  return Math.round(v) + ' °C'
+}
+
+export function fmtConditions(c: Conditions): ConditionsText {
+  const feels = Math.abs(c.feelsC - c.tempC) >= FEELS_DIFF_C ? ', ressenti ' + fmtTempC(c.feelsC) : ''
+  const temp = fmtTempC(c.tempC) + feels + '.'
+  const wind = round5(c.windKmh)
+  const gust = round5(c.gustKmh)
+  const strong = c.gustKmh >= STRONG_GUST_KMH
+  const gusts = c.gustKmh >= GUST_MIN_KMH && c.gustKmh >= GUST_RATIO * c.windKmh ? ', rafales ' + gust : ''
+  if (wind < CALM_KMH && !gusts) return { temp, wind: 'Vent calme.', strong: false }
+  const head = strong ? 'Vent fort ' : 'Vent '
+  return { temp, wind: head + windWord(c.windFrom) + ' ' + Math.max(wind, CALM_KMH) + ' km/h' + gusts + '.', strong }
 }
 
 function slotsEndMs(slots: Slot[]): number {
@@ -299,9 +370,7 @@ export function computeVerdict(
       state: 'oui',
       big: 'OUI',
       sub: 'Prends ton vélo',
-      detail: wetT < 0
-        ? 'Pas de pluie prévue jusqu\'à ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
-        : 'Sec jusqu\'à ' + fmtDayHM(wetT, nowMs) + ' environ.',
+      detail: wetT < 0 ? '' : 'Sec jusqu\'à ' + fmtDayHM(wetT, nowMs) + ' environ.',
     }
   }
   const nowMm = Math.max(mmAtMs(slots, mf, nowMs) ?? 0, radarMm ?? 0)
@@ -319,8 +388,8 @@ export function computeVerdict(
       state: 'bof',
       big: 'OUI',
       sub: rainingNow || wetT < 0
-        ? word + ' en ce moment, sors la veste'
-        : word + ' prévue vers ' + fmtDayHM(wetT, nowMs) + ', sors la veste',
+        ? word + ' en ce moment'
+        : word + ' prévue vers ' + fmtDayHM(wetT, nowMs),
       detail: radarOnly ? unforeseen
         : depMs < 0 ? noDryWindow : 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
     }
@@ -329,13 +398,13 @@ export function computeVerdict(
     return {
       state: 'pluie',
       big: 'PLUIE',
-      sub: 'En ce moment (vue au radar), sors le poncho',
+      sub: 'En ce moment, vue au radar',
       detail: unforeseen,
     }
   }
   const sub = rainingNow || wetT < 0
-    ? 'En ce moment, sors le poncho'
-    : 'Prévue vers ' + fmtDayHM(wetT, nowMs) + ', sors le poncho'
+    ? 'En ce moment'
+    : 'Prévue vers ' + fmtDayHM(wetT, nowMs)
   if (depMs < 0) {
     return { state: 'pluie', big: 'PLUIE', sub, detail: noDryWindow }
   }
