@@ -24,15 +24,15 @@ const conditions = computed(() => {
 
 <template>
   <section
-    class="rounded-2xl px-3.5 py-5 text-center text-white transition-colors"
+    class="rounded-2xl px-3.5 py-4 text-center text-white transition-colors"
     :class="{ 'v-oui': verdict.state === 'oui', 'v-bof': verdict.state === 'bof', 'v-pluie': verdict.state === 'pluie', 'v-inconnu': verdict.state === 'inconnu' }"
   >
     <div class="text-[clamp(44px,14vw,72px)] font-extrabold leading-none tracking-wide desk:text-[84px]">{{ verdict.big }}</div>
-    <div class="mt-2 text-lg font-semibold desk:text-[22px]">{{ verdict.sub }}</div>
-    <div v-if="verdict.detail" class="mt-1 text-sm opacity-90 desk:text-[17px]">{{ verdict.detail }}</div>
-    <div v-if="conditions" class="mt-2 text-sm opacity-90 desk:text-[17px]">
+    <div class="mt-1 text-lg font-semibold leading-tight desk:text-[22px]">{{ verdict.sub }}</div>
+    <div v-if="verdict.detail" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">{{ verdict.detail }}</div>
+    <div v-if="conditions" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">
       {{ conditions.temp }} <span :class="{ 'font-bold': conditions.strong, 'text-amber-300': conditions.strong && verdict.state !== 'bof' }">{{ conditions.wind }}</span>
     </div>
-    <div v-if="fetchedAt" class="mt-2.5 text-xs opacity-75">Trajet de {{ tripMin }} min, données de {{ fmtHM(fetchedAt) }}</div>
+    <div v-if="fetchedAt" class="mt-1.5 text-xs opacity-75">Trajet de {{ tripMin }} min, données de {{ fmtHM(fetchedAt) }}</div>
   </section>
 </template>

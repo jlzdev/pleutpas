@@ -6,6 +6,14 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.4.1] - 2026-10-10
+
+### Améliorations
+
+- Cartouche du verdict densifié sur téléphone (interlignes réduits entre le sous-titre,
+  la ligne température et vent et la ligne "Trajet de ...").
+- "Comment ça marche" ne décrit plus la température et le vent.
+
 ## [1.4.0] - 2026-10-10
 
 ### Nouveautés
