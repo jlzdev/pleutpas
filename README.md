@@ -1,7 +1,7 @@
 # Pleut pas ?
 
 Est-ce que je peux prendre mon vélo maintenant, et sinon à quelle heure ? Gros verdict
-OUI / NON selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
+OUI / PLUIE selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
 heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée.
 Lieu configurable (recherche de ville, géolocalisation ou URL), Besançon par défaut,
 zone couverte : France métropolitaine et pays voisins jusqu'aux bords des grilles Météo-France
