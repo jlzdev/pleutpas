@@ -3,9 +3,10 @@ import {
   BESANCON,
   cleanName,
   displayZone,
+  estimatedTripMin,
   inFranceBounds,
   MAX_TRIP_MIN,
-  MAX_TRIP_MIN_DEST,
+  MIN_TRIP_MIN,
   tripPositions,
   type FrameSample,
   type MfEntry,
@@ -83,15 +84,18 @@ export type Basemap = 'plan' | 'velo'
 
 const [initialPlace, initialDest] = loadPlaces()
 
-function loadTrip(hasDest: boolean): number {
-  const v = parseInt(lsGet(KEY_TRIP) ?? '', 10) || 15
-  return Math.min(hasDest ? MAX_TRIP_MIN_DEST : MAX_TRIP_MIN, Math.max(5, v))
+function clampTrip(v: number): number {
+  return Math.min(MAX_TRIP_MIN, Math.max(MIN_TRIP_MIN, v))
+}
+
+function loadTrip(): number {
+  return clampTrip(parseInt(lsGet(KEY_TRIP) ?? '', 10) || 15)
 }
 
 export const place = ref<Place>(initialPlace)
 export const dest = ref<Place | null>(initialDest)
 export const basemap = ref<Basemap>(lsGet(KEY_BASEMAP) === 'velo' ? 'velo' : 'plan')
-export const tripMin = ref(loadTrip(initialDest !== null))
+export const tripMin = ref(loadTrip())
 export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? lsGet(KEY_REMINDER) as string : '08:00')
 export const weather = ref<OpenMeteoPayload | null>(null)
 export const weatherDest = ref<OpenMeteoPayload | null>(null)
@@ -245,10 +249,11 @@ export function setPlace(p: Place): void {
 
 export function setDest(d: Place | null): void {
   dest.value = d
-  if (d) lsSet(KEY_DEST, JSON.stringify(d))
-  else {
+  if (d) {
+    lsSet(KEY_DEST, JSON.stringify(d))
+    setTripMin(clampTrip(estimatedTripMin(place.value, d)))
+  } else {
     lsRemove(KEY_DEST)
-    if (tripMin.value > MAX_TRIP_MIN) setTripMin(MAX_TRIP_MIN)
   }
   resetData()
 }

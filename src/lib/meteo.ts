@@ -65,8 +65,12 @@ export interface Trip {
 
 export const TRIP_POSITIONS = 25
 export const TRIP_SPEED_KMH = 15
-export const MAX_TRIP_MIN = 60
-export const MAX_TRIP_MIN_DEST = 120
+export const MAX_TRIP_MIN = 120
+export const MIN_TRIP_MIN = 5
+
+export function estimatedTripMin(a: Place, b: Place): number {
+  return Math.round((distanceKm(a, b) / TRIP_SPEED_KMH) * 60 / 5) * 5
+}
 
 export function tripPositions(a: Place, b: Place | null): Place[] {
   if (!b) return [a]
