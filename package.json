@@ -1,7 +1,7 @@
 {
   "name": "pleutpas",
   "private": true,
-  "version": "1.4.1",
+  "version": "1.5.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,7 +13,6 @@
   "dependencies": {
     "geotiff": "^3.0.5",
     "leaflet": "^1.9.4",
-    "pngjs": "^7.0.0",
     "vue": "^3.5.41"
   },
   "devDependencies": {

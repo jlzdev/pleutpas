@@ -1,6 +1,6 @@
 import { fromArrayBuffer } from 'geotiff'
-import { PNG } from 'pngjs'
 import { writeFileSync } from 'node:fs'
+import { crc32, deflateSync } from 'node:zlib'
 import palette from '../src/lib/palette.json' with { type: 'json' }
 
 const PALETTE = palette.steps.map((s) => [
@@ -12,13 +12,6 @@ const PALETTE = palette.steps.map((s) => [
 
 const merc = (lat) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
 const invMerc = (y) => (Math.atan(Math.exp(y)) - Math.PI / 4) * (360 / Math.PI)
-
-function colorFor(mm) {
-  if (!Number.isFinite(mm) || mm < PALETTE[0][0]) return null
-  let c = PALETTE[0]
-  for (const p of PALETTE) if (mm >= p[0]) c = p
-  return c
-}
 
 // l'API renvoie parfois un fault XML avec un statut 200, d'ou la validation du contenu
 async function mf(key, url, check, attempts = 4) {
@@ -78,31 +71,84 @@ const mfTiff = (key, url) => mf(key, url, async (res) => {
   return res.arrayBuffer()
 })
 
+function pngChunk(type, data) {
+  const len = Buffer.alloc(4)
+  len.writeUInt32BE(data.length)
+  const body = Buffer.concat([Buffer.from(type, 'ascii'), data])
+  const crc = Buffer.alloc(4)
+  crc.writeUInt32BE(crc32(body) >>> 0)
+  return Buffer.concat([len, body, crc])
+}
+
+// PNG en palette indexee 4 bits (index 0 transparent, puis les couleurs de la palette) :
+// a resolution egale, trois a quatre fois plus leger qu'un RGBA, et les navigateurs le
+// decodent avec exactement les couleurs de la palette (alpha 0 ou 255), ce que l'app exige
+function encodeIndexedPng(idx, width, height) {
+  const rowBytes = Math.ceil(width / 2)
+  const raw = Buffer.alloc((rowBytes + 1) * height)
+  for (let j = 0; j < height; j++) {
+    const o = j * (rowBytes + 1)
+    for (let i = 0; i < width; i++) {
+      const k = idx[j * width + i]
+      if (k) raw[o + 1 + (i >> 1)] |= (i & 1) ? k : k << 4
+    }
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 4
+  ihdr[9] = 3
+  const plte = Buffer.alloc((PALETTE.length + 1) * 3)
+  PALETTE.forEach((c, i) => {
+    plte[(i + 1) * 3] = c[1]
+    plte[(i + 1) * 3 + 1] = c[2]
+    plte[(i + 1) * 3 + 2] = c[3]
+  })
+  return Buffer.concat([
+    Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]),
+    pngChunk('IHDR', ihdr),
+    pngChunk('PLTE', plte),
+    pngChunk('tRNS', Buffer.from([0])),
+    pngChunk('IDAT', deflateSync(raw, { level: 9 })),
+    pngChunk('IEND', Buffer.alloc(0)),
+  ])
+}
+
+function paletteIndex(mm) {
+  if (!Number.isFinite(mm) || mm < PALETTE[0][0]) return 0
+  let k = 0
+  for (let i = 0; i < PALETTE.length; i++) if (mm >= PALETTE[i][0]) k = i + 1
+  return k
+}
+
+// lignes reechantillonnees en Web Mercator (fond de carte), colonnes gardees telles quelles ;
+// shrink > 1 garde la valeur la plus forte de chaque bloc pour ne perdre aucune averse
 function colorize(data, width, height, north, south, mmScale, shrink) {
   const outW = Math.ceil(width / shrink)
   const outH = Math.ceil(height / shrink)
-  const png = new PNG({ width: outW, height: outH })
+  const idx = new Uint8Array(outW * outH)
   const yTop = merc(north)
   const yBot = merc(south)
   let maxMm = 0
   for (let j = 0; j < outH; j++) {
     const lat = invMerc(yTop + ((yBot - yTop) * (j + 0.5)) / outH)
     const src = Math.max(0, Math.min(height - 1, Math.round(((north - lat) / (north - south)) * height - 0.5)))
+    const src0 = Math.max(0, src - (shrink >> 1))
     for (let i = 0; i < outW; i++) {
-      const srcI = Math.min(width - 1, Math.floor((i + 0.5) * shrink))
-      const v = data[src * width + srcI] * mmScale
-      if (Number.isFinite(v) && v > maxMm) maxMm = v
-      const c = colorFor(v)
-      const o = (j * outW + i) * 4
-      if (c) {
-        png.data[o] = c[1]
-        png.data[o + 1] = c[2]
-        png.data[o + 2] = c[3]
-        png.data[o + 3] = 255
+      let v = 0
+      for (let dj = 0; dj < shrink; dj++) {
+        const sj = Math.min(height - 1, src0 + dj)
+        for (let di = 0; di < shrink; di++) {
+          const si = Math.min(width - 1, i * shrink + di)
+          const x = data[sj * width + si] * mmScale
+          if (Number.isFinite(x) && x > v) v = x
+        }
       }
+      if (v > maxMm) maxMm = v
+      idx[j * outW + i] = paletteIndex(v)
     }
   }
-  return { buffer: PNG.sync.write(png), maxMm: +maxMm.toFixed(2) }
+  return { buffer: encodeIndexedPng(idx, outW, outH), maxMm: +maxMm.toFixed(2) }
 }
 
 export async function buildFrame({ key, api, subset, outDir, mmScale = 1, shrink = 1 }, coverageId, tMs) {
