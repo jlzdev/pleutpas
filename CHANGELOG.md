@@ -6,6 +6,15 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.5.1] - 2026-10-11
+
+### Améliorations
+
+- La durée du trajet se cale d'elle-même sur l'estimation à 15 km/h quand on choisit une
+  arrivée (modifiable ensuite), le curseur monte à 120 min avec ou sans arrivée, et l'aide
+  prévient en ambre quand le trajet dépasse 2 h : la lecture sur le parcours suppose alors
+  qu'on le fait en 2 h, il faut se fier surtout au départ et à l'arrivée.
+
 ## [1.5.0] - 2026-10-11
 
 ### Données

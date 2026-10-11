@@ -2,7 +2,7 @@
 import { computed, ref } from 'vue'
 import { dest, place, reminderTime, setDest, setPlace, setReminderTime, setTripMin, swapPlaces, tripMin } from '../store'
 import { reverseGeocodeName, type GeoResult } from '../lib/api'
-import { distanceKm, fmtMinutes, inFranceBounds, MAX_TRIP_MIN, MAX_TRIP_MIN_DEST, routeLabel, TRIP_SPEED_KMH } from '../lib/meteo'
+import { distanceKm, estimatedTripMin, fmtMinutes, inFranceBounds, MAX_TRIP_MIN, routeLabel, TRIP_SPEED_KMH } from '../lib/meteo'
 import { buildReminderIcs, downloadIcs, REMINDER_LEAD_MIN, reminderLabel as icsLabel } from '../lib/ics'
 import PlaceSearch from './PlaceSearch.vue'
 
@@ -14,15 +14,19 @@ const locating = ref(false)
 
 const SHORT_TRIP_KM = 4
 
-const maxTrip = computed(() => (dest.value ? MAX_TRIP_MIN_DEST : MAX_TRIP_MIN))
-
 const tripHint = computed(() => {
   const d = dest.value
-  if (!d) return ''
+  if (!d) return null
   const km = distanceKm(place.value, d)
-  const min = Math.max(5, Math.round((km / TRIP_SPEED_KMH) * 60 / 5) * 5)
+  const min = Math.max(5, estimatedTripMin(place.value, d))
   const base = 'À vol d\'oiseau ' + (km < 10 ? km.toFixed(1) : Math.round(km)) + ' km, soit environ ' + fmtMinutes(min) + ' à ' + TRIP_SPEED_KMH + ' km/h.'
-  return km < SHORT_TRIP_KM ? base + ' Si près, l\'arrivée ne change rien au verdict : la pluie est connue à 2 km près.' : base
+  if (min > MAX_TRIP_MIN) {
+    return { text: base + ' Trop long pour une lecture sur le parcours : l\'app suppose que tu le fais en ' + fmtMinutes(MAX_TRIP_MIN) + ', fie-toi surtout au départ et à l\'arrivée.', warn: true }
+  }
+  if (km < SHORT_TRIP_KM) {
+    return { text: base + ' Si près, l\'arrivée ne change rien au verdict : la pluie est connue à 2 km près.', warn: false }
+  }
+  return { text: base, warn: false }
 })
 
 function locateMe(): void {
@@ -85,8 +89,8 @@ function pickDest(r: GeoResult): void {
       >✕</button>
     </div>
     <label class="mb-2 block text-sm" for="tripRange">Durée du trajet : <b>{{ tripMin }} min</b></label>
-    <input id="tripRange" type="range" class="w-full accent-legere" min="5" :max="maxTrip" step="5" :value="tripMin" @input="onTrip">
-    <p v-if="tripHint" class="mt-1 text-[13px] text-dim">{{ tripHint }}</p>
+    <input id="tripRange" type="range" class="w-full accent-legere" min="5" :max="MAX_TRIP_MIN" step="5" :value="tripMin" @input="onTrip">
+    <p v-if="tripHint" class="mt-1 text-[13px]" :class="tripHint.warn ? 'text-amber-500' : 'text-dim'">{{ tripHint.text }}</p>
     <label class="mb-2 mt-4 block text-sm" for="placeInput">{{ dest ? 'Départ' : 'Lieu' }} : <b>{{ place.name }}</b></label>
     <PlaceSearch id="placeInput" :near="place" @pick="pickPlace">
       <template #aside>
