@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { nowTick, rainMF, slots } from '../store'
-import { clockParts, fmtHM, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
+import { dest, nowTick, trip, tripMin } from '../store'
+import { clockParts, fmtHM, fmtMinutes, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
 
-const cells = computed<TimelineCell[]>(() => timelineCells(slots.value, rainMF.value, nowTick.value))
+const cells = computed<TimelineCell[]>(() => timelineCells(trip.value, nowTick.value, tripMin.value))
+const tripMode = computed(() => dest.value !== null)
 
 const rainMarks = computed(() => {
   const c = cells.value
@@ -33,11 +34,21 @@ const ticks = computed(() => cells.value
     && !rainMarks.value.some(m => Math.abs(m.i - i) < 3))
   .map(({ start, i }) => ({ label: fmtHM(start), left: (i / cells.value.length) * 100 + '%' })))
 
-function fmtDelay(mins: number): string {
-  if (mins < 60) return mins + ' min'
-  const h = Math.floor(mins / 60)
-  const m = mins % 60
-  return m ? h + ' h ' + String(m).padStart(2, '0') : h + ' h'
+function tripNote(c: TimelineCell[], horizon: string): string {
+  const firstWet = c.findIndex(x => x.wet)
+  if (firstWet < 0) return 'Trajet au sec quelle que soit l\'heure de départ ' + horizon + '.'
+  let lastWet = c.length - 1
+  while (!c[lastWet].wet) lastWet--
+  if (firstWet === 0) {
+    const calm = c.findIndex(x => !x.wet)
+    return calm < 0
+      ? 'Pluie sur le trajet quelle que soit l\'heure de départ ' + horizon + '.'
+      : 'Pluie sur le trajet si tu pars maintenant, départ au sec à partir de ' + fmtHM(c[calm].start) + '.'
+  }
+  const from = fmtHM(c[firstWet].start)
+  return lastWet === c.length - 1
+    ? 'Départ au sec jusqu\'à ' + from + ', pluie sur le trajet ensuite.'
+    : 'Départ au sec jusqu\'à ' + from + ', pluie sur le trajet pour un départ entre ' + from + ' et ' + fmtHM(c[lastWet].start + STEP_5MIN_MS) + '.'
 }
 
 const note = computed(() => {
@@ -46,6 +57,7 @@ const note = computed(() => {
   const horizon = c.length >= 24
     ? 'sur les 2 prochaines heures'
     : 'd\'ici ' + fmtHM(c[c.length - 1].start + STEP_5MIN_MS)
+  if (tripMode.value) return tripNote(c, horizon)
   const firstWet = c.findIndex(x => x.wet)
   if (firstWet < 0) return 'Pas de pluie prévue ' + horizon + '.'
   if (firstWet === 0) {
@@ -58,7 +70,7 @@ const note = computed(() => {
   const mins = Math.max(1, Math.round((startMs - nowTick.value) / 60000))
   let lastWet = c.length - 1
   while (!c[lastWet].wet) lastWet--
-  const head = 'Pluie dans ' + fmtDelay(mins)
+  const head = 'Pluie dans ' + fmtMinutes(mins)
   return lastWet === c.length - 1
     ? head + ', à partir de ' + fmtHM(startMs) + '.'
     : head + ', de ' + fmtHM(startMs) + ' à ' + fmtHM(c[lastWet].start + STEP_5MIN_MS) + '.'
@@ -67,9 +79,9 @@ const note = computed(() => {
 
 <template>
   <section class="card">
-    <h2 class="hdr">Les 2 prochaines heures</h2>
+    <h2 class="hdr">{{ tripMode ? 'Si tu pars dans les 2 prochaines heures' : 'Les 2 prochaines heures' }}</h2>
     <template v-if="cells.length">
-      <div class="mb-1 text-[11px] text-dim">Chaque case = 5 min, couleur = intensité de la pluie</div>
+      <div class="mb-1 text-[11px] text-dim">{{ tripMode ? 'Chaque case = un départ à cette heure, couleur = la pluie la plus forte sur le trajet' : 'Chaque case = 5 min, couleur = intensité de la pluie' }}</div>
       <div class="flex h-7 gap-px overflow-hidden rounded-md desk:h-9">
         <span
           v-for="(c, i) in cells" :key="i" :title="c.title"

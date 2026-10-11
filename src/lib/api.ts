@@ -33,20 +33,30 @@ export interface GeoResult {
   lat: number
   lon: number
   area: string
+  kind: 'town' | 'address'
+}
+
+export interface GeoNear {
+  lat: number
+  lon: number
 }
 
 // endpoint de l'app mobile Meteo-France, token public partage (non officiel, peut casser sans preavis)
 const MF_TOKEN = '__Wj7dVSTjV9YGu1guveLyDq0g7S7TfTjaHBTPTpO0kj8__'
 
-export async function fetchWeather(place: Place): Promise<OpenMeteoPayload> {
+export async function fetchWeather(places: Place[]): Promise<OpenMeteoPayload[]> {
   const url = 'https://api.open-meteo.com/v1/forecast'
-    + '?latitude=' + place.lat + '&longitude=' + place.lon
+    + '?latitude=' + places.map((p) => p.lat).join(',') + '&longitude=' + places.map((p) => p.lon).join(',')
     + '&minutely_15=precipitation,temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m'
     + '&hourly=precipitation,precipitation_probability'
     + '&forecast_days=2&timezone=auto&timeformat=unixtime'
   const res = await fetch(url)
   if (!res.ok) throw new Error('open-meteo http ' + res.status)
-  return res.json()
+  const data = await res.json()
+  // Open-Meteo renvoie un objet pour un lieu et une liste au-dela
+  const list: OpenMeteoPayload[] = Array.isArray(data) ? data : [data]
+  if (list.length !== places.length) throw new Error('open-meteo : ' + list.length + ' lieux au lieu de ' + places.length)
+  return list
 }
 
 export async function fetchRain(place: Place): Promise<MfEntry[] | null> {
@@ -116,33 +126,71 @@ const STEP_COLORS = palette.steps.map((s) => ({
 
 const merc = (lat: number) => Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))
 
-// echantillonne une frame lame d'eau PIAF (PNG de la branche piaf, lignes reechantillonnees
-// en Mercator) au-dessus du lieu : fenetre 3x3 px (~5 km), renvoie l'intensite la plus
-// forte trouvee (mm / 15 min de la palette, 0 si aucun pixel colore), null hors de la frame
-export async function sampleFrameMm(frame: FutureFrame, lat: number, lon: number): Promise<number | null> {
-  const [[south, west], [north, east]] = frame.bounds
-  if (lat <= south || lat >= north || lon <= west || lon >= east) return null
-  const res = await fetch(frame.url)
-  if (!res.ok) throw new Error('frame pluie http ' + res.status)
-  const bmp = await createImageBitmap(await res.blob())
-  const cv = document.createElement('canvas')
-  cv.width = bmp.width
-  cv.height = bmp.height
-  const ctx = cv.getContext('2d')
-  if (!ctx) throw new Error('canvas 2d indisponible')
-  ctx.drawImage(bmp, 0, 0)
-  const x = Math.floor(((lon - west) / (east - west)) * bmp.width)
-  const y = Math.floor(((merc(north) - merc(lat)) / (merc(north) - merc(south))) * bmp.height)
-  const x0 = Math.max(0, x - 1)
-  const y0 = Math.max(0, y - 1)
-  const img = ctx.getImageData(x0, y0, Math.min(bmp.width - 1, x + 1) - x0 + 1, Math.min(bmp.height - 1, y + 1) - y0 + 1)
-  let max = 0
-  for (let i = 0; i < img.data.length; i += 4) {
-    if (img.data[i + 3] !== 255) continue
-    const step = STEP_COLORS.find((c) => c.rgb[0] === img.data[i] && c.rgb[1] === img.data[i + 1] && c.rgb[2] === img.data[i + 2])
-    if (step && step.mm > max) max = step.mm
+const frameImages = new Map<string, Promise<HTMLImageElement>>()
+
+// Image + decode (et non createImageBitmap) : le navigateur partage alors l'image decodee
+// avec la carte au lieu de la decoder deux fois
+export function loadFrameImage(url: string): Promise<HTMLImageElement> {
+  let p = frameImages.get(url)
+  if (!p) {
+    const img = new Image()
+    img.crossOrigin = 'anonymous'
+    img.src = url
+    p = img.decode().then(() => img)
+    p.catch(() => frameImages.delete(url))
+    frameImages.set(url, p)
   }
-  return max
+  return p
+}
+
+export function forgetFrameImages(keep: Set<string>): void {
+  for (const url of [...frameImages.keys()]) {
+    if (!keep.has(url)) frameImages.delete(url)
+  }
+}
+
+// frames lame d'eau des branches piaf / data : lignes reechantillonnees en Mercator, un pixel
+// opaque = une couleur exacte de la palette ; fenetre 3x3 px (~5 km) par point, null hors frame
+export async function sampleFramePoints(frame: FutureFrame, points: Place[]): Promise<(number | null)[]> {
+  const [[south, west], [north, east]] = frame.bounds
+  const img = await loadFrameImage(frame.url)
+  const w = img.naturalWidth
+  const h = img.naturalHeight
+  const px = points.map(({ lat, lon }) => {
+    if (lat <= south || lat >= north || lon <= west || lon >= east) return null
+    return {
+      x: Math.floor(((lon - west) / (east - west)) * w),
+      y: Math.floor(((merc(north) - merc(lat)) / (merc(north) - merc(south))) * h),
+    }
+  })
+  const inside = px.filter((q): q is { x: number; y: number } => q !== null)
+  if (!inside.length) return px.map(() => null)
+  const x0 = Math.max(0, Math.min(...inside.map((q) => q.x)) - 1)
+  const y0 = Math.max(0, Math.min(...inside.map((q) => q.y)) - 1)
+  const x1 = Math.min(w - 1, Math.max(...inside.map((q) => q.x)) + 1)
+  const y1 = Math.min(h - 1, Math.max(...inside.map((q) => q.y)) + 1)
+  const cw = x1 - x0 + 1
+  const ch = y1 - y0 + 1
+  const cv = document.createElement('canvas')
+  cv.width = cw
+  cv.height = ch
+  const ctx = cv.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('canvas 2d indisponible')
+  ctx.drawImage(img, x0, y0, cw, ch, 0, 0, cw, ch)
+  const data = ctx.getImageData(0, 0, cw, ch).data
+  return px.map((q) => {
+    if (!q) return null
+    let max = 0
+    for (let y = Math.max(0, q.y - 1); y <= Math.min(h - 1, q.y + 1); y++) {
+      for (let x = Math.max(0, q.x - 1); x <= Math.min(w - 1, q.x + 1); x++) {
+        const i = ((y - y0) * cw + (x - x0)) * 4
+        if (data[i + 3] !== 255) continue
+        const step = STEP_COLORS.find((c) => c.rgb[0] === data[i] && c.rgb[1] === data[i + 1] && c.rgb[2] === data[i + 2])
+        if (step && step.mm > max) max = step.mm
+      }
+    }
+    return max
+  })
 }
 
 const PHOTON = 'https://photon.komoot.io'
@@ -150,7 +198,20 @@ const PHOTON = 'https://photon.komoot.io'
 // et 1,5 s de grace une fois que le premier a repondu
 const GEO_TIMEOUT_MS = 6000
 const GEO_GRACE_MS = 1500
-const geoFetch = (url: string) => fetch(url, { signal: AbortSignal.timeout(GEO_TIMEOUT_MS) })
+function geoSignal(signal?: AbortSignal): AbortSignal {
+  const ctl = new AbortController()
+  const timer = setTimeout(() => ctl.abort(new DOMException('geocodeur trop lent', 'TimeoutError')), GEO_TIMEOUT_MS)
+  ctl.signal.addEventListener('abort', () => clearTimeout(timer), { once: true })
+  if (signal?.aborted) ctl.abort(signal.reason)
+  else signal?.addEventListener('abort', () => ctl.abort(signal.reason), { once: true })
+  return ctl.signal
+}
+
+const geoFetch = (url: string, signal?: AbortSignal) => fetch(url, { signal: geoSignal(signal) })
+
+function nearParams(near?: GeoNear): string {
+  return near ? '&lat=' + near.lat + '&lon=' + near.lon : ''
+}
 
 async function settleWithGrace<T>(ps: Promise<T>[], graceMs: number): Promise<PromiseSettledResult<T>[]> {
   const wrapped = ps.map((p): Promise<PromiseSettledResult<T>> => p.then(
@@ -188,37 +249,75 @@ async function photonName(lat: number, lon: number): Promise<string | null> {
   return cleanName(p?.city ?? p?.name) || null
 }
 
+const ADDRESS_MAX_M = 200
+
+function addressLabel(street: string, city: string): string {
+  return cleanName(street.charAt(0).toUpperCase() + street.slice(1) + ', ' + city)
+}
+
+async function banAddressName(lat: number, lon: number): Promise<string | null> {
+  const res = await geoFetch('https://data.geopf.fr/geocodage/reverse?index=address&limit=1&lat=' + lat + '&lon=' + lon)
+  if (!res.ok) throw new Error('geocodage inverse http ' + res.status)
+  const data = await res.json()
+  const p = ((data.features || []) as BanFeature[])[0]?.properties
+  if (!p || !p.name || !p.city || p.type === 'municipality') return null
+  if (typeof p.distance !== 'number' || p.distance > ADDRESS_MAX_M) return null
+  return addressLabel(p.name, p.city) || null
+}
+
 export async function reverseGeocodeName(lat: number, lon: number): Promise<string | null> {
+  const address = await banAddressName(lat, lon).catch(() => null)
+  if (address) return address
   const name = await communeName(lat, lon).catch(() => null)
   return name ?? photonName(lat, lon)
 }
 
 interface BanFeature {
   geometry: { coordinates: [number, number] }
-  properties: { label: string; context?: string }
+  properties: { label: string; context?: string; type?: string; name?: string; city?: string; distance?: number }
 }
 
 // geocodage Geoplateforme (Base Adresse Nationale, successeur d'api-adresse.data.gouv.fr),
 // communes seulement ; le departement vient du champ context "70, Haute-Saone, Bourgogne..."
-async function searchBan(q: string): Promise<GeoResult[]> {
-  const res = await geoFetch('https://data.geopf.fr/geocodage/search?q=' + encodeURIComponent(q)
-    + '&index=address&type=municipality&limit=20')
+const BAN = 'https://data.geopf.fr/geocodage/search?index=address&limit=20&q='
+
+function banArea(f: BanFeature): string {
+  return (f.properties.context ?? '').split(', ')[1] ?? ''
+}
+
+async function searchBan(q: string, near?: GeoNear, signal?: AbortSignal): Promise<GeoResult[]> {
+  const res = await geoFetch(BAN + encodeURIComponent(q) + '&type=municipality' + nearParams(near), signal)
   if (!res.ok) throw new Error('geocodage http ' + res.status)
   const data = await res.json()
   return ((data.features || []) as BanFeature[]).map((f) => ({
     name: cleanName(f.properties.label),
     lon: f.geometry.coordinates[0],
     lat: f.geometry.coordinates[1],
-    area: (f.properties.context ?? '').split(', ')[1] ?? '',
+    area: banArea(f),
+    kind: 'town' as const,
   }))
 }
 
-// communes de toute l'emprise des frames (Photon, donnees OpenStreetMap) : pays entre
-// parentheses hors de France, departement (county) en France ou Photon ne sert que de
-// secours quand la BAN est muette
-async function searchPhoton(q: string): Promise<PhotonResult[]> {
+async function searchBanAddresses(q: string, near?: GeoNear, signal?: AbortSignal): Promise<GeoResult[]> {
+  const res = await geoFetch(BAN + encodeURIComponent(q) + nearParams(near), signal)
+  if (!res.ok) throw new Error('geocodage http ' + res.status)
+  const data = await res.json()
+  return ((data.features || []) as BanFeature[])
+    .filter((f) => f.properties.type !== 'municipality' && f.properties.city)
+    .map((f) => {
+      return {
+        name: addressLabel(f.properties.name ?? '', f.properties.city ?? ''),
+        lon: f.geometry.coordinates[0],
+        lat: f.geometry.coordinates[1],
+        area: banArea(f),
+        kind: 'address' as const,
+      }
+    })
+}
+
+async function searchPhoton(q: string, near?: GeoNear, signal?: AbortSignal): Promise<PhotonResult[]> {
   const res = await geoFetch(PHOTON + '/api/?q=' + encodeURIComponent(q)
-    + '&lang=fr&limit=10&layer=city&bbox=' + PHOTON_BBOX)
+    + '&lang=fr&limit=10&layer=city&bbox=' + PHOTON_BBOX + nearParams(near), signal)
   if (!res.ok) throw new Error('photon http ' + res.status)
   const data = await res.json()
   const seen = new Set<string>()
@@ -229,7 +328,7 @@ async function searchPhoton(q: string): Promise<PhotonResult[]> {
     const area = cleanName(fr ? f.properties.county : f.properties.country)
     if (!name || seen.has(name + '|' + area)) continue
     seen.add(name + '|' + area)
-    out.push({ name, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], area, fr })
+    out.push({ name, lon: f.geometry.coordinates[0], lat: f.geometry.coordinates[1], area, kind: 'town', fr })
   }
   return out
 }
@@ -238,15 +337,24 @@ const fold = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g, '').t
 
 // la BAN complete par prefixe jusqu'a 20 communes : sans priorite au nom exact, "Gand"
 // (Belgique) serait chasse des 5 places par Gandrange, Gandelu...
-export async function searchPlaces(q: string): Promise<GeoResult[]> {
-  const [ban, photon] = await settleWithGrace<GeoResult[] | PhotonResult[]>([searchBan(q), searchPhoton(q)], GEO_GRACE_MS)
+export async function searchPlaces(q: string, near?: GeoNear, signal?: AbortSignal): Promise<GeoResult[]> {
+  const [ban, photon, addr] = await settleWithGrace<GeoResult[] | PhotonResult[]>([
+    searchBan(q, near, signal),
+    searchPhoton(q, near, signal),
+    searchBanAddresses(q, near, signal),
+  ], GEO_GRACE_MS)
+  if (signal?.aborted) throw new DOMException('recherche annulee', 'AbortError')
   if (ban.status === 'rejected' && photon.status === 'rejected') throw ban.reason
-  const banList = ban.status === 'fulfilled' ? ban.value : []
+  const inZone = (r: GeoResult) => r.name && inFranceBounds(r.lat, r.lon)
+  const banList = (ban.status === 'fulfilled' ? ban.value as GeoResult[] : []).filter(inZone)
   const photonList = (photon.status === 'fulfilled' ? photon.value as PhotonResult[] : [])
     .filter((r) => ban.status === 'rejected' || !r.fr)
-    .map(({ name, lat, lon, area }) => ({ name, lat, lon, area }))
-  const found = [...banList, ...photonList].filter((r) => r.name && inFranceBounds(r.lat, r.lon))
+    .map(({ name, lat, lon, area, kind }) => ({ name, lat, lon, area, kind }))
+    .filter(inZone)
+  const addrList = (addr.status === 'fulfilled' ? addr.value as GeoResult[] : []).filter(inZone)
+  // communes au nom exact, communes BAN, adresses BAN, puis communes voisines Photon
   const wanted = fold(q.trim())
-  const exact = found.filter((r) => fold(r.name) === wanted)
-  return [...exact, ...found.filter((r) => !exact.includes(r))].slice(0, 5)
+  const exact = [...banList, ...photonList].filter((r) => fold(r.name) === wanted)
+  const rest = [...banList, ...addrList, ...photonList].filter((r) => !exact.includes(r))
+  return [...exact, ...rest].slice(0, 5)
 }

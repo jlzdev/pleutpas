@@ -1,9 +1,10 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { basemap, futureRain, place, recenterTick, setBasemap } from '../store'
-import { fmtHM, FRANCE_BOUNDS } from '../lib/meteo'
+import { basemap, dest, futureRain, place, recenterTick, setBasemap } from '../store'
+import { bearingDeg, fmtHM, FRANCE_BOUNDS } from '../lib/meteo'
 import { rainLayer, type RainLayer } from '../lib/rainLayer'
+import { loadFrameImage } from '../lib/api'
 
 interface ViewFrame {
   time: number
@@ -18,6 +19,10 @@ const playing = ref(false)
 
 let map: L.Map | null = null
 let marker: L.CircleMarker | null = null
+let destMarker: L.CircleMarker | null = null
+let line: L.Polyline | null = null
+let arrows: L.Marker[] = []
+const ARROW_AT = [0.3, 0.7]
 let layer: RainLayer | null = null
 let layerBoundsKey = ''
 let raf = 0
@@ -26,6 +31,11 @@ let headStart = 0
 let drawKey = ''
 
 const FRAME_MS = 150
+const FADE_STEPS = 30
+const FADE = (navigator.hardwareConcurrency || 8) > 4
+const MAX_ZOOM = 14
+const TRIP_ZOOM = 13
+const POINT_ZOOM = 8
 const LOOP_PAUSE_MS = 1200
 
 const ready = new Map<string, HTMLImageElement>()
@@ -49,18 +59,15 @@ const note = computed(() => {
   if (!fs.length) return 'Carte des pluies indisponible pour le moment, la timeline ci-dessus prend le relais.'
   const end = fmtHM(fs[fs.length - 1].time * 1000)
   return fs[0].type === 'obs'
-    ? 'La pluie des 2 dernières heures, puis la prévision jusqu\'à ' + end + '.'
+    ? 'La pluie depuis ' + fmtHM(fs[0].time * 1000) + ', puis la prévision jusqu\'à ' + end + '.'
     : 'La pluie prévue jusqu\'à ' + end + '.'
 })
 
 function loadImage(url: string): void {
   if (ready.has(url) || pending.has(url) || failed.has(url)) return
   pending.add(url)
-  const img = new Image()
-  img.crossOrigin = 'anonymous'
-  img.src = url
-  img.decode()
-    .then(() => { ready.set(url, img) }, () => { failed.add(url) })
+  loadFrameImage(url)
+    .then((img) => { ready.set(url, img) }, () => { failed.add(url) })
     .finally(() => {
       pending.delete(url)
       if (!playing.value) paintStill(frameIdx.value)
@@ -113,11 +120,11 @@ function tick(ts: number): void {
   const cur = fs[head]
   const to = head < fs.length - 1 ? fs[head + 1] : null
   const curImg = ready.get(cur.url)
-  const toImg = to && sameBounds(cur, to) ? ready.get(to.url) : undefined
+  const toImg = FADE && to && sameBounds(cur, to) ? ready.get(to.url) : undefined
   const mix = toImg ? Math.min(1, (ts - headStart) / FRAME_MS) : 0
   frameIdx.value = to && mix >= 0.5 ? head + 1 : head
   if (curImg && layer) {
-    const key = head + ':' + (toImg ? Math.round(mix * 60) : 'hold')
+    const key = head + ':' + (toImg ? Math.round(mix * FADE_STEPS) : 'hold')
     if (key !== drawKey) {
       drawKey = key
       setLayerBounds(cur)
@@ -187,21 +194,56 @@ function onResize(): void {
   map?.invalidateSize()
 }
 
+function recenter(): void {
+  if (!map) return
+  const a: L.LatLngTuple = [place.value.lat, place.value.lon]
+  marker?.setLatLng(a)
+  const d = dest.value
+  if (d && line && destMarker) {
+    const b: L.LatLngTuple = [d.lat, d.lon]
+    line.setLatLngs([a, b]).addTo(map)
+    destMarker.setLatLng(b).addTo(map)
+    const heading = bearingDeg(place.value, d)
+    arrows.forEach((m, i) => {
+      const f = ARROW_AT[i]
+      m.setLatLng([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f])
+      m.setIcon(arrowIcon(heading))
+      m.addTo(map!)
+    })
+    map.fitBounds(L.latLngBounds([a, b]), { padding: [40, 40], maxZoom: TRIP_ZOOM })
+  } else {
+    line?.remove()
+    destMarker?.remove()
+    arrows.forEach((m) => m.remove())
+    map.setView(a, POINT_ZOOM)
+  }
+}
+
+function arrowIcon(heading: number): L.DivIcon {
+  return L.divIcon({
+    className: '',
+    iconSize: [18, 18],
+    iconAnchor: [9, 9],
+    html: '<svg viewBox="0 0 18 18" width="18" height="18" style="transform: rotate(' + Math.round(heading) + 'deg)" aria-hidden="true">'
+      + '<path d="M9 1.5 L16 16 L9 12 L2 16 Z" fill="#1d6ef2" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"/></svg>',
+  })
+}
+
 onMounted(() => {
   if (!mapEl.value) return
   map = L.map(mapEl.value, {
     zoomControl: false,
-    maxZoom: 12,
+    maxZoom: MAX_ZOOM,
     minZoom: 5,
     maxBounds: L.latLngBounds(FRANCE_BOUNDS).pad(0.05),
     maxBoundsViscosity: 1,
-  }).setView([place.value.lat, place.value.lon], 8)
+  }).setView([place.value.lat, place.value.lon], POINT_ZOOM)
   L.control.zoom({ position: 'topright' }).addTo(map)
   const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 12, attribution: '© OpenStreetMap | Météo-France',
+    maxZoom: MAX_ZOOM, attribution: '© OpenStreetMap | Météo-France',
   })
   const velo = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
-    maxZoom: 12, attribution: '<a href="https://www.cyclosm.org/">CyclOSM</a> | © OpenStreetMap | Météo-France',
+    maxZoom: MAX_ZOOM, attribution: '<a href="https://www.cyclosm.org/">CyclOSM</a> | © OpenStreetMap | Météo-France',
   })
   ;(basemap.value === 'velo' ? velo : plan).addTo(map)
   L.control.layers({ 'Plan': plan, 'Vélo (CyclOSM)': velo }, undefined, { position: 'topright' }).addTo(map)
@@ -210,15 +252,18 @@ onMounted(() => {
   marker = L.circleMarker([place.value.lat, place.value.lon], {
     radius: 7, color: '#fff', weight: 2, fillColor: '#1d6ef2', fillOpacity: 1,
   }).addTo(map)
+  destMarker = L.circleMarker([0, 0], {
+    radius: 7, color: '#1d6ef2', weight: 3, fillColor: '#fff', fillOpacity: 1,
+  })
+  line = L.polyline([], { color: '#1d6ef2', weight: 3, dashArray: '6 6', opacity: 0.9 })
+  arrows = ARROW_AT.map(() => L.marker([0, 0], { icon: arrowIcon(0), interactive: false, keyboard: false, zIndexOffset: 500 }))
+  recenter()
   window.addEventListener('resize', onResize)
   rebuild()
 })
 
 watch(futureRain, rebuild)
-watch(recenterTick, () => {
-  map?.setView([place.value.lat, place.value.lon], 8)
-  marker?.setLatLng([place.value.lat, place.value.lon])
-})
+watch(recenterTick, recenter)
 
 onBeforeUnmount(() => {
   stopPlay()

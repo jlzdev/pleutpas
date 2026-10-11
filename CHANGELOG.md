@@ -6,6 +6,59 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.5.0] - 2026-10-11
+
+### Données
+
+- Cartes de pluie à la résolution native de Météo-France (grille de 1 km, 1551 x 1051
+  points) au lieu d'une grille réduite de moitié où trois points sur quatre étaient jetés :
+  les petites averses d'un kilomètre ne disparaissent plus de la carte ni du verdict. Les
+  images passent en palette indexée et pèsent 12 Ko en moyenne au lieu de 19 à 53, un run
+  complet passe de 2,9 Mo à environ 1 Mo.
+- La carte garde 1 h de pluie passée au lieu de 2 (12 images de moins par run), la légende
+  du lecteur donne l'heure réelle de la première image.
+
+### Nouveautés
+
+- Arrivée facultative dans les réglages (recherche de ville ou d'adresse, "Inverser le
+  sens", croix pour la retirer). La pluie est alors lue tout le long du trajet, en ligne
+  droite, à l'heure où l'on passe à chaque endroit : Météo-France "pluie dans l'heure" aux deux bouts, images
+  PIAF et AROME entre les deux, Open-Meteo en dernier recours. Le verdict précise où la
+  pluie tombe ("au départ", "en route", "à l'arrivée"), la carte trace le trajet et cadre
+  les deux villes, la timeline devient "Si tu pars dans les 2 prochaines heures" (une case
+  = un départ, couleur = la pluie la plus forte sur le trajet, même calcul que le prochain
+  départ au sec), le vent est donné "de face", "de dos" ou "de travers", la durée peut
+  monter à 120 min, l'URL (`alat`, `alon`, `anom`) et le rappel agenda portent l'arrivée.
+  Sans arrivée, rien ne change.
+- Recherche de lieu à la frappe (dès 3 lettres, 300 ms après la dernière touche, Entrée
+  choisit le premier résultat, Échap ferme la liste), classée par proximité du lieu courant,
+  étendue aux rues, lieux-dits et numéros ("rue de Vesoul Besançon", "3 rue de Vesoul"),
+  proposés après les communes, avec une icône ville ou épingle devant chaque résultat. Utile pour un trajet de plus de 5 km dans une
+  même grande ville. Le bouton "Chercher" disparaît, la géolocalisation devient une icône
+  à droite du champ Départ, et une croix dans le champ efface la saisie (ou retire
+  l'arrivée quand rien n'est tapé).
+- La carte zoome jusqu'au niveau 14 (12 avant) et cadre le trajet A-B jusqu'au niveau 13.
+- La géolocalisation nomme le lieu par la rue la plus proche ("Rue battant, Besançon") quand
+  il y en a une à moins de 200 m, sinon par la commune comme avant. L'adresse ne s'affiche
+  que dans les réglages : l'en-tête, le titre, le verdict et le rappel agenda donnent la
+  commune, ou les rues quand le trajet reste dans une même commune.
+- Sur la carte, deux flèches sur le trait indiquent le sens du trajet, et un bouton ⇄ dans
+  l'en-tête inverse le sens en un geste (le matin dans un sens, le soir dans l'autre).
+- Une croix en haut de la carte Réglages la referme sans remonter au bouton ⚙.
+- La mention "vélo boulot" disparaît de l'en-tête, l'app sert aussi hors trajet domicile-travail.
+
+### Améliorations
+
+- Avec une arrivée, le verdict s'affiche dès que les images autour de l'heure de départ sont
+  lues, le reste de l'animation se charge en arrière-plan ; la lecture des images ne dessine
+  plus que la zone du trajet (9 fois plus rapide, mesuré 175 ms au lieu de 1,5 s pour 44
+  images sur ordinateur).
+- Open-Meteo est interrogé en un seul appel pour les deux lieux.
+- Animation de la carte plus légère : le fondu entre deux images est redessiné au plus 30
+  fois par seconde, et coupé sur les appareils à 4 cœurs ou moins.
+- Verdict "Données incomplètes" quand la prévision manque sur une partie du trajet, au
+  lieu d'une fausse pluie.
+
 ## [1.4.1] - 2026-10-10
 
 ### Améliorations

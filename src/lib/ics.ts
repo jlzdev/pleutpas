@@ -1,3 +1,4 @@
+import { routeLabel } from './meteo'
 import type { Place } from './meteo'
 
 export const REMINDER_LEAD_MIN = 15
@@ -51,18 +52,19 @@ function fold(line: string): string {
   return out.join(CRLF)
 }
 
-export function placeUrl(place: Place): string {
-  return 'https://pleutpas.fr/?lat=' + place.lat + '&lon=' + place.lon + '&nom=' + encodeURIComponent(place.name)
+export function placeUrl(place: Place, dest: Place | null = null): string {
+  const base = 'https://pleutpas.fr/?lat=' + place.lat + '&lon=' + place.lon + '&nom=' + encodeURIComponent(place.name)
+  return dest ? base + '&alat=' + dest.lat + '&alon=' + dest.lon + '&anom=' + encodeURIComponent(dest.name) : base
 }
 
 // evenement en heure locale flottante (sans fuseau) : l'agenda du telephone sonne a la meme
 // heure murale toute l'annee, ete comme hiver, sans composant VTIMEZONE
-export function buildReminderIcs(place: Place, hhmm: string, now = new Date()): string | null {
+export function buildReminderIcs(place: Place, hhmm: string, now = new Date(), dest: Place | null = null): string | null {
   const startMs = reminderMs(hhmm)
   const hm = parseHHMM(hhmm)
   if (startMs === null || !hm) return null
   const start = new Date(startMs)
-  const url = placeUrl(place)
+  const url = placeUrl(place, dest)
   const date = String(now.getFullYear()) + pad(now.getMonth() + 1) + pad(now.getDate())
   const stamp = now.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '')
   const departure = String(hm[0]) + 'h' + (hm[1] ? pad(hm[1]) : '')
@@ -79,7 +81,7 @@ export function buildReminderIcs(place: Place, hhmm: string, now = new Date()): 
     'DURATION:PT' + REMINDER_LEAD_MIN + 'M',
     'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR',
     'SUMMARY:' + escapeText('Pleut pas ? Vérifie la pluie avant de partir'),
-    'DESCRIPTION:' + escapeText('Départ à ' + departure + ' depuis ' + place.name + '.\n' + url),
+    'DESCRIPTION:' + escapeText('Départ à ' + departure + ' depuis ' + routeLabel(place, dest) + '.\n' + url),
     'URL:' + url,
     'BEGIN:VALARM',
     'ACTION:DISPLAY',

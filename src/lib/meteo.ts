@@ -49,6 +49,51 @@ export interface ConditionsText {
   strong: boolean
 }
 
+export interface FrameSample {
+  time: number
+  past: boolean
+  mm: (number | null)[]
+}
+
+export interface Trip {
+  positions: Place[]
+  hasDest: boolean
+  mf: [MfEntry[] | null, MfEntry[] | null]
+  slots: [Slot[], Slot[]]
+  samples: FrameSample[] | null
+}
+
+export const TRIP_POSITIONS = 25
+export const TRIP_SPEED_KMH = 15
+export const MAX_TRIP_MIN = 60
+export const MAX_TRIP_MIN_DEST = 120
+
+export function tripPositions(a: Place, b: Place | null): Place[] {
+  if (!b) return [a]
+  const out: Place[] = []
+  for (let i = 0; i < TRIP_POSITIONS; i++) {
+    const f = i / (TRIP_POSITIONS - 1)
+    out.push({ name: '', lat: a.lat + (b.lat - a.lat) * f, lon: a.lon + (b.lon - a.lon) * f })
+  }
+  return out
+}
+
+export function distanceKm(a: Place, b: Place): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLat = toRad(b.lat - a.lat)
+  const dLon = toRad(b.lon - a.lon)
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLon / 2) ** 2
+  return 2 * 6371 * Math.asin(Math.sqrt(h))
+}
+
+export function bearingDeg(a: Place, b: Place): number {
+  const toRad = (d: number) => (d * Math.PI) / 180
+  const dLon = toRad(b.lon - a.lon)
+  const y = Math.sin(dLon) * Math.cos(toRad(b.lat))
+  const x = Math.cos(toRad(a.lat)) * Math.sin(toRad(b.lat)) - Math.sin(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.cos(dLon)
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
+}
+
 export const SLOT_MIN = palette.slotMin
 export const WET_MM = palette.wetMm
 export const LIGHT_MAX_MM = palette.lightMaxMm
@@ -57,9 +102,31 @@ export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
 // de la geolocalisation et du deplacement de la carte
 export const FRANCE_BOUNDS: [[number, number], [number, number]] = [[41, -5.5], [51.5, 10]]
 
+// convention des libelles d'adresse : "Rue, Commune"
+export function placeTown(p: Place): string {
+  const i = p.name.lastIndexOf(', ')
+  return i > 0 ? p.name.slice(i + 2) : p.name
+}
+
+function placeStreet(p: Place): string {
+  const town = placeTown(p)
+  return p.name.endsWith(', ' + town) ? p.name.slice(0, -(town.length + 2)) : p.name
+}
+
+export function routeLabels(a: Place, b: Place | null): [string, string | null] {
+  if (!b) return [placeTown(a), null]
+  const same = placeTown(a) === placeTown(b)
+  return same ? [placeStreet(a), placeStreet(b)] : [placeTown(a), placeTown(b)]
+}
+
+export function routeLabel(a: Place, b: Place | null): string {
+  const [x, y] = routeLabels(a, b)
+  return y ? x + ' vers ' + y : x
+}
+
 export function cleanName(v: unknown): string {
   if (typeof v !== 'string') return ''
-  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 40)
+  return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60)
 }
 
 export function inFranceBounds(lat: number, lon: number): boolean {
@@ -111,6 +178,13 @@ export function clockParts(t: number | Date): ClockParts {
     year: Number(out.year), month: Number(out.month), day: Number(out.day),
     h: Number(out.hour), m: Number(out.minute), weekday: out.weekday,
   }
+}
+
+export function fmtMinutes(min: number): string {
+  if (min < 60) return min + ' min'
+  const h = Math.floor(min / 60)
+  const m = min % 60
+  return m ? h + ' h ' + String(m).padStart(2, '0') : h + ' h'
 }
 
 // forme francaise collee ("4h15", "23h"), le format 4:15 est un anglicisme
@@ -176,7 +250,14 @@ function fmtTempC(v: number): string {
   return Math.round(v) + ' °C'
 }
 
-export function fmtConditions(c: Conditions): ConditionsText {
+export function relativeWindWord(windFrom: number, headingDeg: number): string {
+  const apart = Math.abs((((windFrom - headingDeg) % 360) + 540) % 360 - 180)
+  if (apart <= 45) return 'de face'
+  if (apart >= 135) return 'de dos'
+  return 'de travers'
+}
+
+export function fmtConditions(c: Conditions, headingDeg: number | null = null): ConditionsText {
   const feels = Math.abs(c.feelsC - c.tempC) >= FEELS_DIFF_C ? ', ressenti ' + fmtTempC(c.feelsC) : ''
   const temp = fmtTempC(c.tempC) + feels + '.'
   const wind = round5(c.windKmh)
@@ -185,7 +266,8 @@ export function fmtConditions(c: Conditions): ConditionsText {
   const gusts = c.gustKmh >= GUST_MIN_KMH && c.gustKmh >= GUST_RATIO * c.windKmh ? ', rafales ' + gust : ''
   if (wind < CALM_KMH && !gusts) return { temp, wind: 'Vent calme.', strong: false }
   const head = strong ? 'Vent fort ' : 'Vent '
-  return { temp, wind: head + windWord(c.windFrom) + ' ' + Math.max(wind, CALM_KMH) + ' km/h' + gusts + '.', strong }
+  const from = headingDeg === null ? windWord(c.windFrom) : relativeWindWord(c.windFrom, headingDeg)
+  return { temp, wind: head + from + ' ' + Math.max(wind, CALM_KMH) + ' km/h' + gusts + '.', strong }
 }
 
 function slotsEndMs(slots: Slot[]): number {
@@ -220,46 +302,145 @@ function mmAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): number | null
   return s ? s.mm : null
 }
 
-function wetAtMs(slots: Slot[], mf: MfEntry[] | null, tMs: number): boolean | null {
-  const mm = mmAtMs(slots, mf, tMs)
-  return mm === null ? null : mm >= WET_MM
-}
+const FRAME_TOL_MS = 7.5 * 60000
 
-function maxMmWindow(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): number | null {
-  const endMs = startMs + durMin * 60000
-  let max = 0
-  for (let t = startMs; t < endMs; t += STEP_5MIN_MS) {
-    const mm = mmAtMs(slots, mf, t)
-    if (mm === null) return null
-    max = Math.max(max, mm)
+function sampleNear(samples: FrameSample[] | null, tMs: number): FrameSample | null {
+  if (!samples || !samples.length) return null
+  let lo = 0
+  let hi = samples.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1
+    if (samples[mid].time < tMs) lo = mid + 1
+    else hi = mid
   }
-  const last = mmAtMs(slots, mf, endMs - 1)
-  return last === null ? null : Math.max(max, last)
+  let best = samples[lo]
+  if (lo > 0 && Math.abs(samples[lo - 1].time - tMs) < Math.abs(best.time - tMs)) best = samples[lo - 1]
+  return Math.abs(best.time - tMs) <= FRAME_TOL_MS ? best : null
 }
 
-function isDryWindowMs(slots: Slot[], mf: MfEntry[] | null, startMs: number, durMin: number): boolean {
-  const mm = maxMmWindow(slots, mf, startMs, durMin)
-  return mm !== null && mm < WET_MM
+function posIndex(trip: Trip, k: number, n: number): number {
+  const last = trip.positions.length - 1
+  return last === 0 || n === 0 ? 0 : Math.round((k / n) * last)
+}
+
+function endOf(trip: Trip, pos: number): 0 | 1 | null {
+  const last = trip.positions.length - 1
+  if (pos === 0) return 0
+  if (pos === last) return 1
+  return null
+}
+
+function mmAtTrip(trip: Trip, pos: number, tMs: number): number | null {
+  const end = endOf(trip, pos)
+  if (end !== null) return mmAtMs(trip.slots[end], trip.mf[end], tMs)
+  const f = sampleNear(trip.samples, tMs)
+  const mm = f ? f.mm[pos] : null
+  if (mm !== null && mm !== undefined) return mm
+  const near = pos * 2 < trip.positions.length - 1 ? 0 : 1
+  const s = slotAt(trip.slots[near], tMs)
+  return s ? s.mm : null
+}
+
+export interface WindowMax {
+  mm: number
+  pos: number
+  time: number
+}
+
+function maxMmWindow(trip: Trip, startMs: number, durMin: number): WindowMax | null {
+  const n = Math.max(1, Math.round(durMin / 5))
+  const endMs = startMs + durMin * 60000
+  let best: WindowMax | null = null
+  for (let k = 0; k <= n; k++) {
+    const t = k < n ? startMs + k * STEP_5MIN_MS : endMs - 1
+    const pos = posIndex(trip, k, n)
+    const mm = mmAtTrip(trip, pos, t)
+    if (mm === null) return null
+    if (!best || mm > best.mm) best = { mm, pos, time: k < n ? t : endMs }
+  }
+  return best
+}
+
+function isDryWindowMs(trip: Trip, startMs: number, durMin: number): boolean {
+  const w = maxMmWindow(trip, startMs, durMin)
+  return w !== null && w.mm < WET_MM
 }
 
 function next5min(t: number): number {
   return (Math.floor(t / STEP_5MIN_MS) + 1) * STEP_5MIN_MS
 }
 
-function firstWetMs(slots: Slot[], mf: MfEntry[] | null, fromMs: number): number {
-  const endMs = Math.min(fromMs + 48 * 3600000, slotsEndMs(slots))
+function endsEndMs(trip: Trip): number {
+  return Math.max(slotsEndMs(trip.slots[0]), trip.hasDest ? slotsEndMs(trip.slots[1]) : 0)
+}
+
+function firstWetMs(trip: Trip, fromMs: number): number {
+  const endMs = Math.min(fromMs + 48 * 3600000, endsEndMs(trip))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
-    if (wetAtMs(slots, mf, t) === true) return t
+    const a = mmAtMs(trip.slots[0], trip.mf[0], t)
+    if (a !== null && a >= WET_MM) return t
+    if (trip.hasDest) {
+      const b = mmAtMs(trip.slots[1], trip.mf[1], t)
+      if (b !== null && b >= WET_MM) return t
+    }
   }
   return -1
 }
 
-function nextDryDepartureMs(slots: Slot[], mf: MfEntry[] | null, fromMs: number, durMin: number): number {
-  const endMs = Math.min(fromMs + 48 * 3600000, slotsEndMs(slots))
+function firstWetOnTrip(trip: Trip, fromMs: number, durMin: number): WindowMax | null {
+  const n = Math.max(1, Math.round(durMin / 5))
+  const endMs = fromMs + durMin * 60000
+  const probes: number[] = []
+  for (let t = fromMs; t < endMs; t = next5min(t)) probes.push(t)
+  probes.push(endMs - 1)
+  for (const t of probes) {
+    const k = t === endMs - 1 ? n : Math.min(n, Math.round((t - fromMs) / STEP_5MIN_MS))
+    const pos = posIndex(trip, k, n)
+    const mm = mmAtTrip(trip, pos, t)
+    if (mm !== null && mm >= WET_MM) return { mm, pos, time: k === n ? endMs : t }
+  }
+  return null
+}
+
+function nextWetDepartureMs(trip: Trip, fromMs: number, durMin: number): number {
+  const endMs = Math.min(fromMs + 48 * 3600000, endsEndMs(trip))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
-    if (isDryWindowMs(slots, mf, t, durMin)) return t
+    const w = maxMmWindow(trip, t, durMin)
+    if (w === null) return -1
+    if (w.mm >= WET_MM) return t
   }
   return -1
+}
+
+function nextDryDepartureMs(trip: Trip, fromMs: number, durMin: number): number {
+  const endMs = Math.min(fromMs + 48 * 3600000, endsEndMs(trip))
+  for (let t = fromMs; t < endMs; t = next5min(t)) {
+    if (isDryWindowMs(trip, t, durMin)) return t
+  }
+  return -1
+}
+
+// lame d'eau quasi observee au-dessus du depart : derniere frame passee, confirmee par la
+// precedente (une pluie reelle persiste d'une image a l'autre, un parasite isole non)
+export function radarNowMm(samples: FrameSample[] | null): number | null {
+  if (!samples) return null
+  const past = samples.filter((f) => f.past)
+  const last = past[past.length - 1]
+  if (!last) return null
+  const mm = last.mm[0]
+  if (mm === null || mm === undefined) return null
+  const prev = past[past.length - 2]
+  if (mm >= WET_MM && prev) {
+    const confirm = prev.mm[0]
+    if (confirm !== null && confirm !== undefined && confirm < WET_MM) return confirm
+  }
+  return mm
+}
+
+function whereWord(trip: Trip, pos: number): string {
+  if (!trip.hasDest) return ''
+  const end = endOf(trip, pos)
+  return end === 0 ? ' au départ' : end === 1 ? ' à l\'arrivée' : ' en route'
 }
 
 export function intensityColor(mm15: number): string | null {
@@ -284,9 +465,24 @@ export interface TimelineCell {
 // vue unique des 2 prochaines heures en cases de 5 min, memes sources et meme priorite
 // que le verdict (MF pluie dans l'heure d'abord, Open-Meteo au-dela), pour que la carte
 // timeline ne puisse jamais contredire le OUI/NON
-export function timelineCells(slots: Slot[], mf: MfEntry[] | null, nowMs: number): TimelineCell[] {
+export function timelineCells(trip: Trip, nowMs: number, tripMin: number): TimelineCell[] {
   const firstMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS
   const cells: TimelineCell[] = []
+  if (trip.hasDest) {
+    for (let i = 0; i < 24; i++) {
+      const t = firstMs + i * STEP_5MIN_MS
+      const w = maxMmWindow(trip, i === 0 ? nowMs : t, tripMin)
+      if (!w) break
+      cells.push({
+        start: t,
+        wet: w.mm >= WET_MM,
+        color: intensityColor(w.mm),
+        title: 'Départ à ' + fmtHM(t) + ' : ' + w.mm.toFixed(1) + ' mm / 15 min au plus sur le trajet',
+      })
+    }
+    return cells
+  }
+  const [slots, mf] = [trip.slots[0], trip.mf[0]]
   for (let i = 0; i < 24; i++) {
     const t = firstMs + i * STEP_5MIN_MS
     const e = mfEntryAt(mf, t)
@@ -338,15 +534,13 @@ export function dayCells(slots: Slot[], nowMs: number): DayCell[] {
 }
 
 export function computeVerdict(
-  slots: Slot[],
-  mf: MfEntry[] | null,
-  radarMmNow: number | null,
+  trip: Trip,
   tripMin: number,
   nowMs: number,
   fetchedAtMs: number | null,
 ): VerdictView {
   const stale = fetchedAtMs !== null && nowMs - fetchedAtMs > STALE_MS
-  const idx = slotIndexNow(slots, nowMs)
+  const idx = slotIndexNow(trip.slots[0], nowMs)
   if (idx < 0 || stale) {
     return {
       state: 'inconnu',
@@ -359,37 +553,49 @@ export function computeVerdict(
   // "maintenant" : l'echantillonnage de la lame d'eau (frames PIAF passees) ne sert de
   // detecteur de pluie que quand MF ne repond pas.
   // Le premier pas MF demarre au prochain multiple de 5 min, d'ou la tolerance en amont
+  const mf = trip.mf[0]
   const mfCoversNow = !!mf && mf.length > 0
     && nowMs >= mf[0].start - 2 * STEP_5MIN_MS && nowMs < mf[mf.length - 1].end
-  const radarMm = mfCoversNow ? null : radarMmNow
-  const tripMm = maxMmWindow(slots, mf, nowMs, tripMin)
-  const worstMm = tripMm === null ? null : Math.max(tripMm, radarMm ?? 0)
-  if (worstMm !== null && worstMm < WET_MM) {
-    const wetT = firstWetMs(slots, mf, nowMs)
+  const radarMm = mfCoversNow ? null : radarNowMm(trip.samples)
+  const tripW = maxMmWindow(trip, nowMs, tripMin)
+  if (tripW === null) {
+    return {
+      state: 'inconnu',
+      big: '?',
+      sub: 'Données incomplètes',
+      detail: 'Il manque la prévision sur une partie du trajet, actualise dans un moment.',
+    }
+  }
+  const tripMm = tripW.mm
+  const worstMm = Math.max(tripMm, radarMm ?? 0)
+  const firstWet = trip.hasDest ? nextWetDepartureMs(trip, nowMs, tripMin) : firstWetMs(trip, nowMs)
+  if (worstMm < WET_MM) {
     return {
       state: 'oui',
       big: 'OUI',
       sub: 'Prends ton vélo',
-      detail: wetT < 0 ? '' : 'Sec jusqu\'à ' + fmtDayHM(wetT, nowMs) + ' environ.',
+      detail: firstWet < 0 ? '' : 'Sec jusqu\'à ' + fmtDayHM(firstWet, nowMs) + ' environ.',
     }
   }
-  const nowMm = Math.max(mmAtMs(slots, mf, nowMs) ?? 0, radarMm ?? 0)
+  const nowMm = Math.max(mmAtTrip(trip, 0, nowMs) ?? 0, radarMm ?? 0)
   const rainingNow = nowMm >= WET_MM
-  const wetT = firstWetMs(slots, mf, nowMs)
-  const depMs = nextDryDepartureMs(slots, mf, nowMs, tripMin)
-  const noDryWindow = 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(slotsEndMs(slots), nowMs) + ' (fin des prévisions).'
+  const wet = firstWetOnTrip(trip, nowMs, tripMin)
+  const wetT = wet ? wet.time : firstWet
+  const where = wet ? whereWord(trip, wet.pos) : ''
+  const depMs = nextDryDepartureMs(trip, nowMs, tripMin)
+  const noDryWindow = 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(endsEndMs(trip), nowMs) + ' (fin des prévisions).'
   // bruine ou pluie faible seulement sur le trajet : ca se roule avec une veste, l'etat
   // PLUIE est reserve a la vraie pluie
-  const radarOnly = tripMm !== null && tripMm < WET_MM
+  const radarOnly = tripMm < WET_MM
   const unforeseen = 'Averse non prévue, reviens voir quand elle passe.'
-  if (worstMm !== null && worstMm < LIGHT_MAX_MM) {
+  if (worstMm < LIGHT_MAX_MM) {
     const word = lightWord(rainingNow ? nowMm : worstMm)
     return {
       state: 'bof',
       big: 'OUI',
       sub: rainingNow || wetT < 0
         ? word + ' en ce moment'
-        : word + ' prévue vers ' + fmtDayHM(wetT, nowMs),
+        : word + ' prévue vers ' + fmtDayHM(wetT, nowMs) + where,
       detail: radarOnly ? unforeseen
         : depMs < 0 ? noDryWindow : 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
     }
@@ -404,7 +610,7 @@ export function computeVerdict(
   }
   const sub = rainingNow || wetT < 0
     ? 'En ce moment'
-    : 'Prévue vers ' + fmtDayHM(wetT, nowMs)
+    : 'Prévue vers ' + fmtDayHM(wetT, nowMs) + where
   if (depMs < 0) {
     return { state: 'pluie', big: 'PLUIE', sub, detail: noDryWindow }
   }
