@@ -8,11 +8,12 @@ const OUT = 'out-piaf'
 const FAMILY = 'TOTAL_PRECIPITATION_RATE__GROUND_OR_WATER_SURFACE'
 const STEPS = 39
 const MIN_FRAMES = 20
-const PAST_COUNT = 24
+const PAST_COUNT = 12
 // PIAF livre des cumuls sur 5 min : x3 pour retrouver l'echelle d'intensite mm/15 min de la palette
-// partagee avec l'app ; grille native 0.01 deg reduite de moitie pour le poids des PNG
+// partagee avec l'app ; grille native 0.01 deg (1 km) conservee, le PNG indexe reste leger et
+// l'animation reste fluide sur telephone (verifie sur Samsung)
 const MM_SCALE = 3
-const SHRINK = 2
+const SHRINK = 1
 // un nouveau run PIAF sort toutes les 5 min : au-dela de 45 min sans publication, vraie panne
 const MAX_AGE_MS = 45 * 60000
 
