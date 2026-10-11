@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { nowTick, slots, weather } from '../store'
+import { dest, nowTick, slots, weather } from '../store'
 import { clockParts, dayCells, fmtDay, fmtHM, intensityColor } from '../lib/meteo'
 
 interface HourBar {
@@ -68,7 +68,7 @@ const note = computed(() => {
 
 <template>
   <section class="card">
-    <h2 class="hdr">La suite de la journée</h2>
+    <h2 class="hdr">La suite de la journée{{ dest ? ' au départ' : '' }}</h2>
     <template v-if="bars.length">
       <div class="mb-1 text-[11px] text-dim">Chaque barre = 1 h, après les 2 heures ci-dessus. Fond bleu pâle = probabilité de pluie</div>
       <div class="flex h-[110px] items-end gap-[3px] desk:h-[140px]">

@@ -1,38 +1,50 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { place, reminderTime, setPlace, setReminderTime, setTripMin, tripMin } from '../store'
-import { reverseGeocodeName, searchPlaces, type GeoResult } from '../lib/api'
-import { inFranceBounds } from '../lib/meteo'
+import { dest, place, reminderTime, setDest, setPlace, setReminderTime, setTripMin, swapPlaces, tripMin } from '../store'
+import { reverseGeocodeName, type GeoResult } from '../lib/api'
+import { distanceKm, fmtMinutes, inFranceBounds, MAX_TRIP_MIN, MAX_TRIP_MIN_DEST, routeLabel, TRIP_SPEED_KMH } from '../lib/meteo'
 import { buildReminderIcs, downloadIcs, REMINDER_LEAD_MIN, reminderLabel as icsLabel } from '../lib/ics'
+import PlaceSearch from './PlaceSearch.vue'
 
-const query = ref('')
-const results = ref<GeoResult[]>([])
-const message = ref('')
+const emit = defineEmits<{ close: [] }>()
+
+const geoMessage = ref('')
 const geolocSupported = 'geolocation' in navigator
 const locating = ref(false)
-const searching = ref(false)
+
+const SHORT_TRIP_KM = 4
+
+const maxTrip = computed(() => (dest.value ? MAX_TRIP_MIN_DEST : MAX_TRIP_MIN))
+
+const tripHint = computed(() => {
+  const d = dest.value
+  if (!d) return ''
+  const km = distanceKm(place.value, d)
+  const min = Math.max(5, Math.round((km / TRIP_SPEED_KMH) * 60 / 5) * 5)
+  const base = 'À vol d\'oiseau ' + (km < 10 ? km.toFixed(1) : Math.round(km)) + ' km, soit environ ' + fmtMinutes(min) + ' à ' + TRIP_SPEED_KMH + ' km/h.'
+  return km < SHORT_TRIP_KM ? base + ' Si près, l\'arrivée ne change rien au verdict : la pluie est connue à 2 km près.' : base
+})
 
 function locateMe(): void {
   if (locating.value) return
   locating.value = true
-  message.value = 'Localisation...'
+  geoMessage.value = 'Localisation...'
   navigator.geolocation.getCurrentPosition(async pos => {
     const lat = Math.round(pos.coords.latitude * 1000) / 1000
     const lon = Math.round(pos.coords.longitude * 1000) / 1000
     if (!inFranceBounds(lat, lon)) {
       locating.value = false
-      message.value = 'Position hors de la zone couverte (France et pays voisins).'
+      geoMessage.value = 'Position hors de la zone couverte (France et pays voisins).'
       return
     }
     let name: string | null = null
     try { name = await reverseGeocodeName(lat, lon) } catch { /* nom facultatif */ }
     locating.value = false
-    message.value = ''
-    results.value = []
+    geoMessage.value = ''
     setPlace({ name: name ?? 'Ma position', lat, lon })
   }, err => {
     locating.value = false
-    message.value = err.code === err.PERMISSION_DENIED
+    geoMessage.value = err.code === err.PERMISSION_DENIED
       ? 'Géolocalisation refusée (autorise-la dans le navigateur, et il faut du HTTPS).'
       : 'Position introuvable pour le moment.'
   }, { timeout: 10000, maximumAge: 60000 })
@@ -49,78 +61,50 @@ function onReminder(e: Event): void {
 const reminderLabel = computed(() => icsLabel(reminderTime.value))
 
 function addReminder(): void {
-  const ics = buildReminderIcs(place.value, reminderTime.value)
+  const ics = buildReminderIcs(place.value, reminderTime.value, new Date(), dest.value)
   if (ics) downloadIcs(ics, 'pleutpas-rappel.ics')
 }
 
-let searchSeq = 0
-
-async function search(): Promise<void> {
-  const q = query.value.trim()
-  if (q.length < 3) {
-    results.value = []
-    message.value = 'Tape au moins 3 lettres.'
-    return
-  }
-  const seq = ++searchSeq
-  searching.value = true
-  message.value = 'Recherche...'
-  results.value = []
-  try {
-    const found = await searchPlaces(q)
-    if (seq !== searchSeq) return
-    results.value = found
-    message.value = found.length ? '' : 'Aucun lieu trouvé pour "' + q + '" dans la zone couverte (France et pays voisins).'
-  } catch {
-    if (seq !== searchSeq) return
-    message.value = 'Recherche indisponible, vérifie ta connexion.'
-  } finally {
-    if (seq === searchSeq) searching.value = false
-  }
-}
-
-function label(r: GeoResult): string {
-  return r.name + (r.area ? ' (' + r.area + ')' : '')
-}
-
-function pick(r: GeoResult): void {
-  results.value = []
-  query.value = ''
-  message.value = ''
+function pickPlace(r: GeoResult): void {
+  geoMessage.value = ''
   setPlace({ name: r.name, lat: r.lat, lon: r.lon })
+}
+
+function pickDest(r: GeoResult): void {
+  setDest({ name: r.name, lat: r.lat, lon: r.lon })
 }
 </script>
 
 <template>
   <section class="card">
-    <h2 class="hdr">Réglages</h2>
+    <div class="flex items-start justify-between gap-2">
+      <h2 class="hdr">Réglages</h2>
+      <button
+        type="button" class="-mr-2 -mt-2 flex h-9 w-9 flex-none cursor-pointer items-center justify-center text-xl leading-none text-dim active:text-ink"
+        aria-label="Fermer les réglages" @click="emit('close')"
+      >✕</button>
+    </div>
     <label class="mb-2 block text-sm" for="tripRange">Durée du trajet : <b>{{ tripMin }} min</b></label>
-    <input id="tripRange" type="range" class="w-full accent-legere" min="5" max="60" step="5" :value="tripMin" @input="onTrip">
-    <label class="mb-2 mt-4 block text-sm" for="placeInput">Lieu : <b>{{ place.name }}</b></label>
-    <div class="flex gap-2">
-      <input
-        id="placeInput" v-model="query" type="search" placeholder="Chercher une ville..."
-        class="min-w-0 flex-1 rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-[15px] text-ink"
-        @keydown.enter="search"
-      >
-      <button
-        class="inline-flex w-[88px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-line bg-panel2 px-3.5 py-2.5 text-sm active:bg-line disabled:cursor-wait"
-        :disabled="searching" :aria-label="searching ? 'Recherche en cours' : 'Chercher'" @click="search"
-      ><span v-if="searching" class="block h-4 w-4 animate-spin rounded-full border-2 border-line border-t-ink"></span><template v-else>Chercher</template></button>
-    </div>
-    <button
-      v-if="geolocSupported"
-      class="mt-2 w-full cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line"
-      :disabled="locating" @click="locateMe"
-    >{{ locating ? 'Localisation...' : 'Utiliser ma position' }}</button>
-    <div class="mt-2 flex flex-col gap-1.5">
-      <button
-        v-for="r in results" :key="r.lat + '/' + r.lon"
-        class="cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-left text-sm active:bg-line"
-        @click="pick(r)"
-      >{{ label(r) }}</button>
-      <div v-if="message" class="text-[13px] text-dim">{{ message }}</div>
-    </div>
+    <input id="tripRange" type="range" class="w-full accent-legere" min="5" :max="maxTrip" step="5" :value="tripMin" @input="onTrip">
+    <p v-if="tripHint" class="mt-1 text-[13px] text-dim">{{ tripHint }}</p>
+    <label class="mb-2 mt-4 block text-sm" for="placeInput">{{ dest ? 'Départ' : 'Lieu' }} : <b>{{ place.name }}</b></label>
+    <PlaceSearch id="placeInput" :near="place" @pick="pickPlace">
+      <template #aside>
+        <button
+          v-if="geolocSupported"
+          class="inline-flex h-[46px] w-[46px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-line bg-panel2 text-ink active:bg-line disabled:cursor-wait"
+          :disabled="locating" :aria-label="locating ? 'Localisation en cours' : 'Utiliser ma position'" title="Utiliser ma position" @click="locateMe"
+        >
+          <span v-if="locating" class="block h-4 w-4 animate-spin rounded-full border-2 border-line border-t-ink"></span>
+          <svg v-else class="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>
+        </button>
+      </template>
+    </PlaceSearch>
+    <div v-if="geoMessage" class="mt-2 text-[13px] text-dim">{{ geoMessage }}</div>
+    <label class="mb-2 mt-4 block text-sm" for="destInput">Arrivée (facultatif) : <b>{{ dest ? dest.name : 'aucune' }}</b></label>
+    <PlaceSearch id="destInput" :near="place" :clearable="dest !== null" @pick="pickDest" @clear="setDest(null)" />
+    <button v-if="dest" class="mt-2 w-full cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line" @click="swapPlaces">Inverser le sens</button>
+    <p v-else class="mt-1.5 text-[13px] text-dim">Avec une arrivée, la pluie est lue tout le long du trajet, à l'heure où tu y passes.</p>
     <label class="mb-2 mt-4 block text-sm" for="reminderTime">Rappel avant le départ : <b>{{ reminderLabel }}</b></label>
     <div class="flex gap-2">
       <input
@@ -130,6 +114,6 @@ function pick(r: GeoResult): void {
       >
       <button class="flex-none cursor-pointer rounded-[10px] border border-line bg-panel2 px-3.5 py-2.5 text-sm active:bg-line" @click="addReminder">Ajouter à mon agenda</button>
     </div>
-    <p class="mt-1.5 text-[13px] text-dim">Indique ton heure de départ. Ton agenda te préviendra {{ REMINDER_LEAD_MIN }} min avant, du lundi au vendredi, et un tap ouvrira la météo de {{ place.name }}.</p>
+    <p class="mt-1.5 text-[13px] text-dim">Indique ton heure de départ. Ton agenda te préviendra {{ REMINDER_LEAD_MIN }} min avant, du lundi au vendredi, et un tap ouvrira la météo de {{ routeLabel(place, dest) }}.</p>
   </section>
 </template>

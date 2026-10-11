@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fetchedAt, nowTick, radarPending, radarMmNow, rainMF, refreshing, slots, tripMin, weather } from '../store'
-import { computeVerdict, conditionsAt, fmtConditions, fmtHM, type VerdictView } from '../lib/meteo'
+import { dest, fetchedAt, frameSamples, nowTick, place, radarPending, refreshing, trip, tripMin, weather } from '../store'
+import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, routeLabel, type VerdictView } from '../lib/meteo'
 
 const verdict = computed<VerdictView>(() => {
   if (!weather.value) {
@@ -9,16 +9,24 @@ const verdict = computed<VerdictView>(() => {
       ? { state: 'inconnu', big: '...', sub: 'Chargement', detail: '' }
       : { state: 'inconnu', big: '?', sub: 'Météo injoignable', detail: 'Vérifie ta connexion puis actualise.' }
   }
-  if (radarPending.value && radarMmNow.value === null) {
+  if (radarPending.value && frameSamples.value === null) {
     return { state: 'inconnu', big: '...', sub: 'Vérification du radar', detail: '' }
   }
-  return computeVerdict(slots.value, rainMF.value, radarMmNow.value, tripMin.value, nowTick.value, fetchedAt.value)
+  return computeVerdict(trip.value, tripMin.value, nowTick.value, fetchedAt.value)
 })
 
 const conditions = computed(() => {
   if (!weather.value || verdict.value.state === 'inconnu') return null
   const c = conditionsAt(weather.value.minutely_15, nowTick.value)
-  return c ? fmtConditions(c) : null
+  if (!c) return null
+  const d = dest.value
+  return fmtConditions(c, d ? bearingDeg(place.value, d) : null)
+})
+
+const foot = computed(() => {
+  const d = dest.value
+  const head = d ? routeLabel(place.value, d) + ', ' + tripMin.value + ' min' : 'Trajet de ' + tripMin.value + ' min'
+  return head + ', données de ' + fmtHM(fetchedAt.value as number)
 })
 </script>
 
@@ -33,6 +41,6 @@ const conditions = computed(() => {
     <div v-if="conditions" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">
       {{ conditions.temp }} <span :class="{ 'font-bold': conditions.strong, 'text-amber-300': conditions.strong && verdict.state !== 'bof' }">{{ conditions.wind }}</span>
     </div>
-    <div v-if="fetchedAt" class="mt-1.5 text-xs opacity-75">Trajet de {{ tripMin }} min, données de {{ fmtHM(fetchedAt) }}</div>
+    <div v-if="fetchedAt" class="mt-1.5 text-xs opacity-75">{{ foot }}</div>
   </section>
 </template>
