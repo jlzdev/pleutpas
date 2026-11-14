@@ -2,22 +2,29 @@ import { computed, ref } from 'vue'
 import {
   BESANCON,
   cleanName,
+  clockParts,
   displayZone,
   estimatedTripMin,
   inFranceBounds,
   MAX_TRIP_MIN,
   MIN_TRIP_MIN,
+  TOMORROW_FROM_HOUR,
   tripPositions,
   type FrameSample,
   type MfEntry,
+  type MfForecast,
   type Place,
   type Slot,
   type Trip,
+  type Vigilance,
 } from './lib/meteo'
 import { parseHHMM } from './lib/ics'
 import {
+  fetchForecastMF,
   fetchFutureRain,
   fetchRain,
+  fetchVigilance,
+  fetchWarning,
   fetchWeather,
   forgetFrameImages,
   loadFrameImage,
@@ -102,6 +109,9 @@ export const weatherDest = ref<OpenMeteoPayload | null>(null)
 export const fetchedAt = ref<number | null>(null)
 export const rainMF = ref<MfEntry[] | null>(null)
 export const rainMFDest = ref<MfEntry[] | null>(null)
+export const forecastMF = ref<MfForecast | null>(null)
+export const forecastMFDest = ref<MfForecast | null>(null)
+export const vigilance = ref<Vigilance | null>(null)
 export const frameSamples = ref<FrameSample[] | null>(null)
 export const radarPending = ref(false)
 export const futureRain = ref<FutureRain | null>(null)
@@ -193,10 +203,12 @@ export async function refresh(fromButton = false): Promise<void> {
   radarPending.value = true
   if (fromButton) recenterTick.value++
   const futP = fetchFutureRain().catch(() => null)
-  const [w, r, rd] = await Promise.allSettled([
+  const [w, r, rd, f, fd] = await Promise.allSettled([
     fetchWeather(places),
     fetchRain(p),
     d ? fetchRain(d) : Promise.resolve(null),
+    fetchForecastMF(p),
+    d ? fetchForecastMF(d) : Promise.resolve(null),
   ])
   if (seq !== refreshSeq) return
   const key = cacheKey(p, d)
@@ -217,8 +229,19 @@ export async function refresh(fromButton = false): Promise<void> {
       }
     } catch { /* entree corrompue */ }
   }
-  rainMF.value = r.status === 'fulfilled' ? r.value : null
-  rainMFDest.value = rd.status === 'fulfilled' ? rd.value : null
+  const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
+  const rain = settled(r)
+  const rainDest = settled(rd)
+  rainMF.value = rain?.entries ?? null
+  rainMFDest.value = rainDest?.entries ?? null
+  const fc = settled(f)
+  const fcDest = settled(fd)
+  forecastMF.value = fc
+  forecastMFDest.value = fcDest
+  void fetchVigilance(
+    [fc?.dept ?? rain?.dept ?? null, d ? (fcDest?.dept ?? rainDest?.dept ?? null) : null],
+    clockParts(Date.now()).h >= TOMORROW_FROM_HOUR,
+  ).catch(() => null).then((v) => { if (seq === refreshSeq) vigilance.value = v })
   const fut = await futP
   if (seq !== refreshSeq) return
   futureRain.value = hasFuture(fut) ? fut : (hasFuture(futureRain.value) ? futureRain.value : null)
@@ -237,6 +260,9 @@ function resetData(): void {
   weatherDest.value = null
   fetchedAt.value = null
   frameSamples.value = null
+  forecastMF.value = null
+  forecastMFDest.value = null
+  vigilance.value = null
   recenterTick.value++
   void refresh(false)
 }
@@ -302,6 +328,7 @@ declare global {
   interface Window { __pp: Record<string, unknown> }
 }
 window.__pp = {
-  place, dest, tripMin, weather, weatherDest, fetchedAt, rainMF, rainMFDest, frameSamples, radarPending, refreshing,
-  futureRain, slots, slotsDest, trip, nowTick, displayZone, refresh, setPlace, setDest, swapPlaces,
+  place, dest, tripMin, weather, weatherDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
+  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone,
+  refresh, setPlace, setDest, swapPlaces, fetchWarning,
 }

@@ -6,6 +6,20 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.6.0] - 2026-11-14
+
+### Nouveautés
+
+- Le sous-titre du OUI devient "Ça roule" au lieu de "Prends ton vélo" : l'app sert aussi à
+  pied, en randonnée ou en trottinette.
+- Sous le verdict, sur une ligne à part sous la température et le vent, deux informations
+  hiver en texte seul, affichées seulement quand il y a quelque chose à dire et sans effet sur le verdict OUI /
+  PLUIE : la vigilance neige-verglas Météo-France du département (jaune, orange ou rouge, et
+  "demain" à partir de 16 h quand elle ne vaut que pour le lendemain), et la neige, la pluie
+  verglaçante ou le risque de verglas annoncés par la prévision Météo-France pour les deux
+  prochaines heures ("Neige vers 8h.", "Risque de verglas 45 % (Météo-France)."). Avec une
+  arrivée, départ et arrivée sont lus et la phrase précise le lieu.
+
 ## [1.5.1] - 2026-10-11
 
 ### Améliorations

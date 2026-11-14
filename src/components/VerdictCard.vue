@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { dest, fetchedAt, frameSamples, nowTick, place, radarPending, refreshing, trip, tripMin, weather } from '../store'
-import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, routeLabel, type VerdictView } from '../lib/meteo'
+import { dest, fetchedAt, forecastMF, forecastMFDest, frameSamples, nowTick, place, radarPending, refreshing, trip, tripMin, vigilance, weather } from '../store'
+import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, fmtVigilance, routeLabel, winterNote, type InfoText, type VerdictView } from '../lib/meteo'
 
 const verdict = computed<VerdictView>(() => {
   if (!weather.value) {
@@ -23,6 +23,17 @@ const conditions = computed(() => {
   return fmtConditions(c, d ? bearingDeg(place.value, d) : null)
 })
 
+// neige, verglas et vigilance : des informations comme la temperature, jamais un verdict
+const notes = computed<InfoText[]>(() => {
+  if (!weather.value || verdict.value.state === 'inconnu') return []
+  const out: InfoText[] = []
+  const winter = winterNote(forecastMF.value, forecastMFDest.value, dest.value !== null, nowTick.value)
+  if (winter) out.push(winter)
+  const v = fmtVigilance(vigilance.value)
+  if (v) out.push(v)
+  return out
+})
+
 const foot = computed(() => {
   const d = dest.value
   const head = d ? routeLabel(place.value, d) + ', ' + tripMin.value + ' min' : 'Trajet de ' + tripMin.value + ' min'
@@ -40,6 +51,9 @@ const foot = computed(() => {
     <div v-if="verdict.detail" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">{{ verdict.detail }}</div>
     <div v-if="conditions" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">
       {{ conditions.temp }} <span :class="{ 'font-bold': conditions.strong, 'text-amber-300': conditions.strong && verdict.state !== 'bof' }">{{ conditions.wind }}</span>
+    </div>
+    <div v-if="notes.length" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">
+      <span v-for="(n, i) in notes" :key="n.text" :class="{ 'font-bold': n.strong, 'text-amber-300': n.strong && verdict.state !== 'bof' }">{{ (i ? ' ' : '') + n.text }}</span>
     </div>
     <div v-if="fetchedAt" class="mt-1.5 text-xs opacity-75">{{ foot }}</div>
   </section>

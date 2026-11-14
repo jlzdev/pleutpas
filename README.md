@@ -27,6 +27,11 @@ Trois familles de sources, par ordre d'autorité sur le verdict :
 3. Open-Meteo (minutely_15 et hourly) : au-delà de l'heure couverte par Météo-France,
    et pour la suite de la journée. Fournit aussi température, ressenti et vent du moment.
 
+À titre d'information, sans effet sur le verdict : la vigilance neige-verglas du département
+et la neige, la pluie verglaçante ou le risque de verglas des deux prochaines heures, lus sur
+la prévision et la vigilance Météo-France (endpoints de l'application mobile, comme la pluie
+dans l'heure, France seulement).
+
 Avec une arrivée, le trajet est une ligne droite échantillonnée dans l'espace et le temps
 (25 positions, une image par instant de passage) : Météo-France "pluie dans l'heure" aux deux
 extrémités, images PIAF puis AROME-PI entre les deux, Open-Meteo de l'extrémité la plus proche

@@ -1,5 +1,5 @@
 import palette from './palette.json'
-import { cleanName, FRANCE_BOUNDS, inFranceBounds, type MfEntry, type Place } from './meteo'
+import { cleanName, FRANCE_BOUNDS, inFranceBounds, type MfEntry, type MfForecast, type Place, type Vigilance } from './meteo'
 
 export interface OpenMeteoPayload {
   timezone?: string
@@ -59,13 +59,26 @@ export async function fetchWeather(places: Place[]): Promise<OpenMeteoPayload[]>
   return list
 }
 
-export async function fetchRain(place: Place): Promise<MfEntry[] | null> {
+export interface RainResult {
+  entries: MfEntry[] | null
+  dept: string | null
+}
+
+const DEPT_RE = /^(\d{2}|2A|2B)$/
+const SNOW_ICE_PHENOMENON = '5'
+
+function deptOf(v: unknown): string | null {
+  return typeof v === 'string' && DEPT_RE.test(v) ? v : null
+}
+
+export async function fetchRain(place: Place): Promise<RainResult> {
   const res = await fetch('https://webservice.meteofrance.com/rain?lat=' + place.lat
     + '&lon=' + place.lon + '&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance http ' + res.status)
   const data = await res.json()
+  const dept = deptOf(data.position?.dept)
   // meteofrance.com affiche le forecast meme quand rain_product_available vaut 0 (constate a Royan sous orage) : seule l'absence de forecast fait foi
-  if (!data.forecast || !data.forecast.length) return null
+  if (!data.forecast || !data.forecast.length) return { entries: null, dept }
   const f: { dt: number; rain: number; desc: string }[] = data.forecast
   const entries: MfEntry[] = []
   for (let i = 0; i < f.length; i++) {
@@ -74,7 +87,60 @@ export async function fetchRain(place: Place): Promise<MfEntry[] | null> {
       : (i > 0 ? (f[i].dt - f[i - 1].dt) * 1000 : 600000)
     entries.push({ start, end: start + dur, level: f[i].rain, desc: f[i].desc })
   }
-  return entries
+  return { entries, dept }
+}
+
+const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+
+// prevision de l'app mobile Meteo-France (meme webservice et meme token que /rain), pas horaire :
+// seuls la neige, le libelle de temps et le risque de verglas en sont gardes
+export async function fetchForecastMF(place: Place): Promise<MfForecast | null> {
+  const res = await fetch('https://webservice.meteofrance.com/v2/forecast?lat=' + place.lat
+    + '&lon=' + place.lon + '&lang=fr&token=' + MF_TOKEN)
+  if (!res.ok) throw new Error('meteofrance forecast http ' + res.status)
+  const data = await res.json()
+  const p = data.properties
+  if (!p || !Array.isArray(p.forecast)) return null
+  const hours = (p.forecast as { time?: unknown; snow_1h?: unknown; weather_description?: unknown }[])
+    .map((f) => ({
+      start: Date.parse(typeof f.time === 'string' ? f.time : ''),
+      snowCm: num(f.snow_1h),
+      desc: typeof f.weather_description === 'string' ? f.weather_description : '',
+    }))
+    .filter((h) => Number.isFinite(h.start))
+  const hazards = ((Array.isArray(p.probability_forecast) ? p.probability_forecast : []) as { time?: unknown; freezing_hazard?: unknown }[])
+    .map((h) => ({ start: Date.parse(typeof h.time === 'string' ? h.time : ''), freezingPct: num(h.freezing_hazard) }))
+    .filter((h) => Number.isFinite(h.start))
+  return { dept: deptOf(p.french_department), hours, hazards }
+}
+
+// vigilance departementale de l'app mobile (meme webservice), couleur 1 vert a 4 rouge du
+// phenomene neige-verglas, echeance J ou J1 (disponible a partir de 16 h environ)
+export async function fetchWarning(dept: string, echeance: 'J' | 'J1'): Promise<number | null> {
+  if (!DEPT_RE.test(dept)) return null
+  const res = await fetch('https://webservice.meteofrance.com/v3/warning/currentphenomenons?domain='
+    + encodeURIComponent(dept) + '&depth=1&echeance=' + echeance + '&token=' + MF_TOKEN)
+  if (!res.ok) throw new Error('meteofrance vigilance http ' + res.status)
+  const data = await res.json()
+  const list = (Array.isArray(data.phenomenons_max_colors) ? data.phenomenons_max_colors : []) as
+    { phenomenon_id?: unknown; phenomenon_max_color_id?: unknown }[]
+  const color = list.find((x) => String(x.phenomenon_id) === SNOW_ICE_PHENOMENON)?.phenomenon_max_color_id
+  return typeof color === 'number' && color >= 1 && color <= 4 ? color : null
+}
+
+export async function fetchVigilance(depts: (string | null)[], withTomorrow: boolean): Promise<Vigilance | null> {
+  const list = [...new Set(depts.filter((d): d is string => d !== null))]
+  if (!list.length) return null
+  const worst = async (echeance: 'J' | 'J1'): Promise<number | null> => {
+    const rs = await Promise.allSettled(list.map((d) => fetchWarning(d, echeance)))
+    let m: number | null = null
+    for (const r of rs) {
+      if (r.status === 'fulfilled' && r.value !== null && (m === null || r.value > m)) m = r.value
+    }
+    return m
+  }
+  const [today, tomorrow] = await Promise.all([worst('J'), withTomorrow ? worst('J1') : Promise.resolve(null)])
+  return { today, tomorrow }
 }
 
 const DATA_BASE: string = import.meta.env.VITE_DATA_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/data'

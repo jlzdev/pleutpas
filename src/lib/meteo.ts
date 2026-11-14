@@ -19,6 +19,40 @@ export interface MfEntry {
   desc: string
 }
 
+export interface MfHour {
+  start: number
+  snowCm: number
+  desc: string
+}
+
+export interface MfHazard {
+  start: number
+  freezingPct: number
+}
+
+export interface MfForecast {
+  dept: string | null
+  hours: MfHour[]
+  hazards: MfHazard[]
+}
+
+export interface Vigilance {
+  today: number | null
+  tomorrow: number | null
+}
+
+export interface InfoText {
+  text: string
+  strong: boolean
+}
+
+export interface WinterInfo {
+  kind: 'neige' | 'verglacant' | 'risque'
+  time: number
+  now: boolean
+  pct: number
+}
+
 export interface VerdictView {
   state: 'oui' | 'bof' | 'pluie' | 'inconnu'
   big: string
@@ -272,6 +306,69 @@ export function fmtConditions(c: Conditions, headingDeg: number | null = null): 
   const head = strong ? 'Vent fort ' : 'Vent '
   const from = headingDeg === null ? windWord(c.windFrom) : relativeWindWord(c.windFrom, headingDeg)
   return { temp, wind: head + from + ' ' + Math.max(wind, CALM_KMH) + ' km/h' + gusts + '.', strong }
+}
+
+export const FREEZING_MIN_PCT = 30
+export const FREEZING_STRONG_PCT = 60
+export const TOMORROW_FROM_HOUR = 16
+const HOUR_MS = 3600000
+const HAZARD_STEP_MS = 3 * HOUR_MS
+const TIMELINE_MS = 24 * STEP_5MIN_MS
+const WINTER_RANK: Record<WinterInfo['kind'], number> = { risque: 1, neige: 2, verglacant: 3 }
+const VIGILANCE_WORDS = ['', 'verte', 'jaune', 'orange', 'rouge']
+
+// prevision mobile Meteo-France sur l'horizon de la frise (2 h), a titre d'information :
+// pluie verglacante annoncee, sinon neige, sinon risque de verglas calcule par Meteo-France
+export function winterAt(fc: MfForecast, nowMs: number): WinterInfo | null {
+  const endMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + TIMELINE_MS
+  const hours = fc.hours.filter((h, i) => {
+    const next = fc.hours[i + 1]
+    const endOfStep = next && next.start > h.start ? next.start : h.start + HOUR_MS
+    return endOfStep > nowMs && h.start < endMs
+  })
+  const info = (h: MfHour, kind: WinterInfo['kind']): WinterInfo => ({ kind, time: h.start, now: h.start <= nowMs, pct: 0 })
+  const ice = hours.find((h) => h.desc.toLowerCase().includes('vergla'))
+  if (ice) return info(ice, 'verglacant')
+  const snow = hours.find((h) => h.snowCm > 0 || h.desc.toLowerCase().includes('neige'))
+  if (snow) return info(snow, 'neige')
+  let worst: MfHazard | null = null
+  for (const hz of fc.hazards) {
+    if (hz.start + HAZARD_STEP_MS > nowMs && hz.start < endMs && (!worst || hz.freezingPct > worst.freezingPct)) worst = hz
+  }
+  if (worst && worst.freezingPct >= FREEZING_MIN_PCT) return { kind: 'risque', time: worst.start, now: true, pct: worst.freezingPct }
+  return null
+}
+
+export function fmtWinter(w: WinterInfo, nowMs: number, where = ''): InfoText {
+  if (w.kind === 'risque') {
+    return { text: 'Risque de verglas' + where + ' ' + Math.round(w.pct) + ' % (Météo-France).', strong: w.pct >= FREEZING_STRONG_PCT }
+  }
+  const word = w.kind === 'verglacant' ? 'Pluie verglaçante' : 'Neige'
+  const when = w.now ? ' en ce moment' : ' vers ' + fmtDayHM(w.time, nowMs)
+  return { text: word + where + when + '.', strong: w.kind === 'verglacant' }
+}
+
+export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: boolean, nowMs: number): InfoText | null {
+  const wa = a ? winterAt(a, nowMs) : null
+  const wb = hasDest && b ? winterAt(b, nowMs) : null
+  if (wa && wb) {
+    return WINTER_RANK[wb.kind] > WINTER_RANK[wa.kind]
+      ? fmtWinter(wb, nowMs, ' à l\'arrivée')
+      : fmtWinter(wa, nowMs, ' au départ')
+  }
+  if (wa) return fmtWinter(wa, nowMs, hasDest ? ' au départ' : '')
+  if (wb) return fmtWinter(wb, nowMs, ' à l\'arrivée')
+  return null
+}
+
+export function fmtVigilance(v: Vigilance | null): InfoText | null {
+  if (!v) return null
+  const level = (c: number | null) => (c !== null && c >= 2 ? Math.min(c, 4) : null)
+  const today = level(v.today)
+  if (today) return { text: 'Vigilance ' + VIGILANCE_WORDS[today] + ' neige-verglas.', strong: today >= 3 }
+  const tomorrow = level(v.tomorrow)
+  if (tomorrow) return { text: 'Vigilance ' + VIGILANCE_WORDS[tomorrow] + ' neige-verglas demain.', strong: tomorrow >= 3 }
+  return null
 }
 
 function slotsEndMs(slots: Slot[]): number {
@@ -577,7 +674,7 @@ export function computeVerdict(
     return {
       state: 'oui',
       big: 'OUI',
-      sub: 'Prends ton vélo',
+      sub: 'Ça roule',
       detail: firstWet < 0 ? '' : 'Sec jusqu\'à ' + fmtDayHM(firstWet, nowMs) + ' environ.',
     }
   }
