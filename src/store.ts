@@ -1,6 +1,7 @@
 import { computed, ref } from 'vue'
 import {
   cleanName,
+  coordsName,
   displayZone,
   estimatedTripMin,
   hourlyEndMs,
@@ -36,7 +37,6 @@ const KEY_TRIP = 'pleutpas.tripMin'
 const KEY_PLACE = 'pleutpas.place'
 const KEY_DEST = 'pleutpas.dest'
 const KEY_CACHE = 'pleutpas.cache'
-const KEY_BASEMAP = 'pleutpas.basemap'
 const KEY_REMINDER = 'pleutpas.reminderTime'
 
 export function lsGet(key: string): string | null {
@@ -63,7 +63,7 @@ function placeFromQuery(q: URLSearchParams, latKey: string, lonKey: string, name
   const lat = parseFloat(q.get(latKey) ?? '')
   const lon = parseFloat(q.get(lonKey) ?? '')
   if (!isFinite(lat) || !isFinite(lon) || !inFranceBounds(lat, lon)) return null
-  return { name: cleanName(q.get(nameKey)) || lat.toFixed(2) + ' ' + lon.toFixed(2), lat, lon }
+  return { name: cleanName(q.get(nameKey)) || coordsName(lat, lon), lat, lon }
 }
 
 function loadPlaces(): [Place | null, Place | null] {
@@ -87,8 +87,6 @@ function loadPlaces(): [Place | null, Place | null] {
   return [place, place ? dest : null]
 }
 
-export type Basemap = 'plan' | 'velo'
-
 const [initialPlace, initialDest] = loadPlaces()
 
 function clampTrip(v: number): number {
@@ -101,7 +99,6 @@ function loadTrip(): number {
 
 export const place = ref<Place | null>(initialPlace)
 export const dest = ref<Place | null>(initialDest)
-export const basemap = ref<Basemap>(lsGet(KEY_BASEMAP) === 'velo' ? 'velo' : 'plan')
 export const tripMin = ref(loadTrip())
 export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? lsGet(KEY_REMINDER) as string : '08:00')
 export const forecast = ref<PointForecast | null>(null)
@@ -300,11 +297,6 @@ export function swapPlaces(): void {
   resetData()
 }
 
-export function setBasemap(b: Basemap): void {
-  basemap.value = b
-  lsSet(KEY_BASEMAP, b)
-}
-
 export function setTripMin(n: number): void {
   tripMin.value = n
   lsSet(KEY_TRIP, String(n))
@@ -317,6 +309,7 @@ export function setReminderTime(v: string): void {
 }
 
 export function initStore(): void {
+  lsRemove('pleutpas.basemap')
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !place.value) return
     if (fetchedAt.value === null || Date.now() - fetchedAt.value > 5 * 60 * 1000) {

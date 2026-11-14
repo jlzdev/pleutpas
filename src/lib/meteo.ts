@@ -182,6 +182,10 @@ export function routeLabel(a: Place, b: Place | null): string {
   return y ? x + ' vers ' + y : x
 }
 
+export function coordsName(lat: number, lon: number): string {
+  return lat.toFixed(2) + ' ' + lon.toFixed(2)
+}
+
 export function cleanName(v: unknown): string {
   if (typeof v !== 'string') return ''
   return v.replace(/[\u0000-\u001f\u007f]/g, '').trim().slice(0, 60)

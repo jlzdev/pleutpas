@@ -53,13 +53,13 @@ const updatedText = computed(() => fetchedAt.value === null
         Comment ça marche
         <svg class="h-4 w-4 flex-none transition-transform group-open:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
       </summary>
-      <p class="mt-2.5">Pleut pas ? répond à une question simple : partir à vélo maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>
+      <p class="mt-2.5">Pleut pas ? répond à une question simple : partir maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>
       <ul class="mt-2 list-disc pl-5">
         <li>La pluie de la dernière heure au radar, puis la prévision minute par minute (Météo-France pluie dans l'heure, PIAF et AROME), puis la prévision Météo-France heure par heure (Open-Meteo hors de France).</li>
         <li>Neige et verglas, à titre d'information : vigilance Météo-France du département, et neige ou risque de verglas annoncés par Météo-France pour les deux prochaines heures.</li>
         <li>Les deux prochaines heures en cases de cinq minutes, puis la suite de la journée heure par heure.</li>
         <li>Avec une arrivée dans les réglages, la pluie est lue tout le long du trajet, en ligne droite, à l'heure où tu passes à chaque endroit (précision d'environ 2 km).</li>
-        <li>France métropolitaine et pays voisins, choix de la ville ou géolocalisation, installable comme une application sur le téléphone.</li>
+        <li>France métropolitaine et pays voisins, choix de la ville, géolocalisation ou épingle posée sur la carte, installable comme une application sur le téléphone.</li>
       </ul>
     </details>
   </main>
@@ -70,7 +70,6 @@ const updatedText = computed(() => fetchedAt.value === null
     <a class="underline" href="https://geo.api.gouv.fr/decoupage-administratif" target="_blank" rel="noopener" title="Commune d'un point">geo.api.gouv.fr</a>
     <a class="underline" href="https://photon.komoot.io/" target="_blank" rel="noopener" title="Communes hors de France, données OpenStreetMap">Photon</a>
     <a class="underline" href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener" title="Fonds de carte et lieux, ODbL">© OpenStreetMap contributors</a>
-    <a class="underline" href="https://www.cyclosm.org/" target="_blank" rel="noopener" title="Fond de carte vélo">CyclOSM</a>
     <a class="underline" href="mailto:contact@pleutpas.fr" title="Un retour, une idée">contact@pleutpas.fr</a>
     <a class="underline" href="https://github.com/jlzdev/pleutpas/blob/main/CHANGELOG.md" target="_blank" rel="noopener" title="Nouveautés et code source">v{{ version }}</a>
     <span><a class="underline" href="https://open-meteo.com/" target="_blank" rel="noopener" title="Prévisions hors de France et en secours">Open-Meteo</a>

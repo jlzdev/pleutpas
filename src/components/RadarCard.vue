@@ -1,10 +1,13 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { basemap, dest, futureRain, recenterTick, setBasemap } from '../store'
+import { dest, futureRain, recenterTick, setDest } from '../store'
 import { bearingDeg, fmtHM, FRANCE_BOUNDS, type Place } from '../lib/meteo'
 import { rainLayer, type RainLayer } from '../lib/rainLayer'
 import { loadFrameImage } from '../lib/api'
+import { PICK_ZOOM, usePickOnMap } from '../lib/pickOnMap'
+import { geolocSupported, getPosition, locateError } from '../lib/locate'
+import MapPickBar from './MapPickBar.vue'
 
 interface ViewFrame {
   time: number
@@ -14,6 +17,22 @@ interface ViewFrame {
 }
 
 const props = defineProps<{ place: Place }>()
+
+const { picking, resolving, pending: pickPending, name: pickName, outside, canStart, canDest, enter, cancel, useAsStart, useAsDest } = usePickOnMap()
+let pickBtn: HTMLAnchorElement | null = null
+let locateBtn: HTMLAnchorElement | null = null
+let framed: { center: L.LatLng; zoom: number } | null = null
+const FRAMED_TOLERANCE_PX = 3
+const MAX_BOUNDS = L.latLngBounds(FRANCE_BOUNDS).pad(0.05)
+const locating = ref(false)
+let meMarker: L.CircleMarker | null = null
+const mapMsg = ref('')
+let msgTimer = 0
+const MSG_MS = 6000
+const PIN_SVG = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M10 18.5c-3.3-4-5.5-7.1-5.5-10a5.5 5.5 0 0 1 11 0c0 2.9-2.2 6-5.5 10z"/><circle cx="10" cy="8.5" r="2"/></svg>'
+const LOCATE_SVG = '<svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">'
+  + '<circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>'
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const frameIdx = ref(0)
@@ -213,13 +232,89 @@ function recenter(): void {
       m.setIcon(arrowIcon(heading))
       m.addTo(map!)
     })
-    map.fitBounds(L.latLngBounds([a, b]), { padding: [40, 40], maxZoom: TRIP_ZOOM })
+    if (!picking.value) map.fitBounds(L.latLngBounds([a, b]), { padding: [40, 40], maxZoom: TRIP_ZOOM, animate: false })
   } else {
     line?.remove()
     destMarker?.remove()
     arrows.forEach((m) => m.remove())
-    map.setView(a, POINT_ZOOM)
+    if (!picking.value) map.setView(a, POINT_ZOOM, { animate: false })
   }
+  if (!picking.value) {
+    meMarker?.remove()
+    map.panInsideBounds(MAX_BOUNDS, { animate: false })
+  }
+  framed = { center: map.getCenter(), zoom: map.getZoom() }
+}
+
+function viewMoved(): boolean {
+  if (!map || !framed) return true
+  if (map.getZoom() !== framed.zoom) return true
+  return map.latLngToContainerPoint(framed.center).distanceTo(map.getSize().divideBy(2)) > FRAMED_TOLERANCE_PX
+}
+
+function showMsg(text: string): void {
+  clearTimeout(msgTimer)
+  mapMsg.value = text
+  msgTimer = window.setTimeout(() => { mapMsg.value = '' }, MSG_MS)
+}
+
+async function locateOnMap(): Promise<void> {
+  if (!map || locating.value) return
+  locating.value = true
+  try {
+    const { lat, lon } = await getPosition()
+    if (!map) return
+    const here: L.LatLngTuple = [lat, lon]
+    map.setView(here, Math.max(map.getZoom(), PICK_ZOOM), { animate: false })
+    meMarker?.setLatLng(here).addTo(map)
+  } catch (e) {
+    showMsg(locateError(e))
+  } finally {
+    locating.value = false
+  }
+}
+
+function togglePick(): void {
+  if (!map) return
+  if (picking.value) {
+    onCancel()
+    return
+  }
+  if (playing.value) togglePlay()
+  enter(map, viewMoved() ? null : props.place)
+  map.getContainer().focus({ preventScroll: true })
+}
+
+function onCancel(): void {
+  cancel()
+  recenter()
+}
+
+function controlButton(bar: HTMLElement, cls: string, label: string, svg: string, onClick: () => void): HTMLAnchorElement {
+  const a = L.DomUtil.create('a', 'map-ctl ' + cls, bar) as HTMLAnchorElement
+  a.href = '#'
+  a.setAttribute('role', 'button')
+  a.setAttribute('aria-label', label)
+  a.title = label
+  a.innerHTML = svg
+  L.DomEvent.on(a, 'click', L.DomEvent.stop).on(a, 'click', onClick)
+  return a
+}
+
+function mapControls(): L.Control {
+  const ctl = new L.Control({ position: 'topright' })
+  ctl.onAdd = () => {
+    const bar = L.DomUtil.create('div', 'leaflet-bar')
+    L.DomEvent.disableClickPropagation(bar)
+    pickBtn = controlButton(bar, 'pick-place', 'Choisir un lieu sur la carte', PIN_SVG, togglePick)
+    pickBtn.setAttribute('aria-pressed', 'false')
+    if (geolocSupported) {
+      locateBtn = controlButton(bar, 'locate-me', 'Centrer la carte sur ma position', LOCATE_SVG, () => { void locateOnMap() })
+      locateBtn.setAttribute('aria-busy', 'false')
+    }
+    return bar
+  }
+  return ctl
 }
 
 function arrowIcon(heading: number): L.DivIcon {
@@ -239,19 +334,17 @@ onMounted(() => {
     zoomControl: false,
     maxZoom: MAX_ZOOM,
     minZoom: 5,
-    maxBounds: L.latLngBounds(FRANCE_BOUNDS).pad(0.05),
+    maxBounds: MAX_BOUNDS,
     maxBoundsViscosity: 1,
   }).setView(here, POINT_ZOOM)
   L.control.zoom({ position: 'topright' }).addTo(map)
-  const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: MAX_ZOOM, attribution: '© OpenStreetMap | Météo-France',
+  }).addTo(map)
+  mapControls().addTo(map)
+  meMarker = L.circleMarker([0, 0], {
+    radius: 6, color: '#fff', weight: 2, fillColor: '#2bb673', fillOpacity: 1, interactive: false,
   })
-  const velo = L.tileLayer('https://{s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png', {
-    maxZoom: MAX_ZOOM, attribution: '<a href="https://www.cyclosm.org/">CyclOSM</a> | © OpenStreetMap | Météo-France',
-  })
-  ;(basemap.value === 'velo' ? velo : plan).addTo(map)
-  L.control.layers({ 'Plan': plan, 'Vélo (CyclOSM)': velo }, undefined, { position: 'topright' }).addTo(map)
-  map.on('baselayerchange', (e: L.LayersControlEvent) => setBasemap(e.layer === velo ? 'velo' : 'plan'))
   layer = rainLayer(FRANCE_BOUNDS, { opacity: 0.85, zIndex: 5 }).addTo(map)
   marker = L.circleMarker(here, {
     radius: 7, color: '#fff', weight: 2, fillColor: '#1d6ef2', fillOpacity: 1,
@@ -268,6 +361,11 @@ onMounted(() => {
 
 watch(futureRain, rebuild)
 watch(recenterTick, recenter)
+watch(locating, (busy) => locateBtn?.setAttribute('aria-busy', String(busy)))
+watch(picking, (on) => {
+  pickBtn?.setAttribute('aria-pressed', String(on))
+  if (!on) pickBtn?.focus({ preventScroll: true })
+})
 
 onBeforeUnmount(() => {
   stopPlay()
@@ -290,20 +388,27 @@ onBeforeUnmount(() => {
       >
         {{ current.type === 'fcst' ? 'Prévision' : 'Radar' }} {{ fmtHM(current.time * 1000) }}
       </div>
-    </div>
-    <div class="mt-2.5 flex items-center gap-2.5">
-      <button class="iconbtn" :aria-label="playing ? 'Pause' : 'Lecture'" @click="togglePlay">
-        <span v-if="playing">❚❚</span><span v-else>▶&#xFE0E;</span>
-      </button>
-      <input
-        type="range" class="flex-1 accent-legere"
-        min="0" :max="maxIdx" :value="frameIdx" @input="onSlide"
-      >
-      <div class="min-w-[88px] text-right text-sm tabular-nums">
-        {{ current ? fmtHM(current.time * 1000) : '--h--' }}
-        <span v-if="current?.type === 'fcst'" class="block text-[10px] text-bruine">prévision</span>
+      <div v-if="picking" class="pointer-events-none absolute left-1/2 top-1/2 z-[1000] -translate-x-1/2 -translate-y-full" aria-hidden="true">
+        <svg class="h-10 w-10 overflow-visible drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]" viewBox="0 0 20 20" fill="#1d6ef2" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><path d="M10 20c-3.6-4.3-6-7.8-6-11.2a6 6 0 0 1 12 0C16 12.2 13.6 15.7 10 20z"/><circle cx="10" cy="8.6" r="2.2" fill="#fff" stroke="none"/></svg>
       </div>
     </div>
-    <div class="mt-2 text-xs text-dim">{{ note }}</div>
+    <div v-if="mapMsg" class="mt-2 text-xs text-amber-300" role="alert">{{ mapMsg }}</div>
+    <MapPickBar v-if="picking" :name="pickName" :resolving="resolving" :pending="pickPending !== null" :outside="outside" :can-start="canStart" :can-dest="canDest" :has-dest="!!dest" @start="useAsStart" @dest="useAsDest" @cancel="onCancel" @remove-dest="setDest(null)" />
+    <template v-else>
+      <div class="mt-2.5 flex items-center gap-2.5">
+        <button class="iconbtn" :aria-label="playing ? 'Pause' : 'Lecture'" @click="togglePlay">
+          <span v-if="playing">❚❚</span><span v-else>▶&#xFE0E;</span>
+        </button>
+        <input
+          type="range" class="flex-1 accent-legere"
+          min="0" :max="maxIdx" :value="frameIdx" @input="onSlide"
+        >
+        <div class="min-w-[88px] text-right text-sm tabular-nums">
+          {{ current ? fmtHM(current.time * 1000) : '--h--' }}
+          <span v-if="current?.type === 'fcst'" class="block text-[10px] text-bruine">prévision</span>
+        </div>
+      </div>
+      <div class="mt-2 text-xs text-dim">{{ note }} Avec l'épingle, choisis un lieu directement sur la carte.</div>
+    </template>
   </section>
 </template>

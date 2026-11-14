@@ -6,6 +6,18 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.10.0] - 2026-11-14
+
+### Corrections
+
+- Au chargement d'un trajet, les repères de départ et d'arrivée n'apparaissent plus brièvement agrandis : le recadrage de la carte se fait sans animation de zoom.
+
+### Améliorations
+
+- Choix d'un lieu directement sur la carte : bouton épingle à droite de la carte (bleu quand le mode est actif), carte centrée sur le départ (ou laissée où tu l'as déplacée), épingle fixe au centre, adresse visée affichée en direct, boutons "Partir d'ici", "Arriver ici" (durée du trajet calée sur la distance) et "Retirer l'arrivée, garder le départ" quand un trajet est en place ; les boutons restent actifs pendant la recherche de l'adresse et se grisent quand l'épingle est déjà sur le lieu, le radar reste visible pendant le choix.
+- Bouton de géolocalisation sur la carte, sous l'épingle : centre la carte sur ta position (point vert), en mode visée l'adresse sous l'épingle se met à jour.
+- Le fond de carte vélo (CyclOSM) et son bouton de choix sont retirés, la carte garde le plan OpenStreetMap.
+
 ## [1.9.0] - 2026-11-14
 
 ### Améliorations

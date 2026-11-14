@@ -3,7 +3,7 @@
 Est-ce que je peux prendre mon vélo maintenant, et sinon à quelle heure ? Gros verdict
 OUI / PLUIE selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
 heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée.
-Lieu choisi au premier lancement (géolocalisation, recherche de ville ou d'adresse, ou URL), mémorisé sur l'appareil,
+Lieu choisi au premier lancement (géolocalisation, recherche de ville ou d'adresse, épingle posée sur la carte, ou URL), mémorisé sur l'appareil,
 arrivée facultative (la pluie est alors lue tout le long du trajet, en ligne droite, à
 l'heure où l'on passe à chaque endroit, et le vent devient "de face", "de dos" ou "de
 travers"),
@@ -47,7 +47,8 @@ La recherche de lieu interroge le géocodage de la Géoplateforme (Base Adresse 
 communes puis rues et numéros, département affiché entre parenthèses, résultats classés par
 proximité du lieu courant) et, pour les pays voisins,
 Photon (komoot, données OpenStreetMap, pays affiché entre parenthèses) ; après
-géolocalisation, la commune vient de l'API Découpage administratif (geo.api.gouv.fr), puis
+géolocalisation ou choix à l'épingle sur la carte, l'adresse vient du géocodage inverse de
+la Géoplateforme, la commune de l'API Découpage administratif (geo.api.gouv.fr), puis
 de Photon hors de France.
 
 Le site est une PWA installable (bandeau "Ajoute Pleut pas ? à ton écran d'accueil" à la
@@ -89,5 +90,4 @@ lame d'eau et prévisions PIAF / AROME-PI [Météo-France](https://meteofrance.c
 (Licence Ouverte), lieux [Base Adresse Nationale](https://adresse.data.gouv.fr/) et
 [API Découpage administratif](https://geo.api.gouv.fr/decoupage-administratif) (Licence
 Ouverte), hors de France [Photon](https://photon.komoot.io/) (données OpenStreetMap, ODbL),
-fonds de carte [OpenStreetMap](https://www.openstreetmap.org/) et
-[CyclOSM](https://www.cyclosm.org/).
+fond de carte [OpenStreetMap](https://www.openstreetmap.org/).

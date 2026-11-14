@@ -428,15 +428,15 @@ type PhotonResult = GeoResult & { fr: boolean }
 
 // commune contenant le point (API Decoupage administratif, polygone), fiable meme en
 // pleine campagne la ou le geocodage inverse par adresse ne renvoie rien
-async function communeName(lat: number, lon: number): Promise<string | null> {
-  const res = await geoFetch('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=nom')
+async function communeName(lat: number, lon: number, signal?: AbortSignal): Promise<string | null> {
+  const res = await geoFetch('https://geo.api.gouv.fr/communes?lat=' + lat + '&lon=' + lon + '&fields=nom', signal)
   if (!res.ok) throw new Error('communes http ' + res.status)
   const data: { nom?: string }[] = await res.json()
   return data[0]?.nom ?? null
 }
 
-async function photonName(lat: number, lon: number): Promise<string | null> {
-  const res = await geoFetch(PHOTON + '/reverse?lat=' + lat + '&lon=' + lon + '&lang=fr')
+async function photonName(lat: number, lon: number, signal?: AbortSignal): Promise<string | null> {
+  const res = await geoFetch(PHOTON + '/reverse?lat=' + lat + '&lon=' + lon + '&lang=fr', signal)
   if (!res.ok) throw new Error('photon http ' + res.status)
   const data = await res.json()
   const p = ((data.features || []) as PhotonFeature[])[0]?.properties
@@ -449,8 +449,8 @@ function addressLabel(street: string, city: string): string {
   return cleanName(street.charAt(0).toUpperCase() + street.slice(1) + ', ' + city)
 }
 
-async function banAddressName(lat: number, lon: number): Promise<string | null> {
-  const res = await geoFetch('https://data.geopf.fr/geocodage/reverse?index=address&limit=1&lat=' + lat + '&lon=' + lon)
+async function banAddressName(lat: number, lon: number, signal?: AbortSignal): Promise<string | null> {
+  const res = await geoFetch('https://data.geopf.fr/geocodage/reverse?index=address&limit=1&lat=' + lat + '&lon=' + lon, signal)
   if (!res.ok) throw new Error('geocodage inverse http ' + res.status)
   const data = await res.json()
   const p = ((data.features || []) as BanFeature[])[0]?.properties
@@ -459,11 +459,11 @@ async function banAddressName(lat: number, lon: number): Promise<string | null> 
   return addressLabel(p.name, p.city) || null
 }
 
-export async function reverseGeocodeName(lat: number, lon: number): Promise<string | null> {
-  const address = await banAddressName(lat, lon).catch(() => null)
+export async function reverseGeocodeName(lat: number, lon: number, signal?: AbortSignal): Promise<string | null> {
+  const address = await banAddressName(lat, lon, signal).catch(() => null)
   if (address) return address
-  const name = await communeName(lat, lon).catch(() => null)
-  return name ?? photonName(lat, lon)
+  const name = await communeName(lat, lon, signal).catch(() => null)
+  return name ?? photonName(lat, lon, signal).catch(() => null)
 }
 
 interface BanFeature {

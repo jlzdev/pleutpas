@@ -32,6 +32,12 @@ body {
   .iconbtn {
     @apply h-[42px] w-[42px] flex-none cursor-pointer rounded-[10px] border border-line bg-panel text-xl leading-none text-ink active:bg-panel2;
   }
+  .pickbtn {
+    @apply h-[42px] min-w-0 cursor-pointer rounded-[10px] border border-line bg-panel2 px-2 text-sm font-semibold text-ink active:bg-line disabled:cursor-default disabled:opacity-50;
+  }
+  .pickbtn-dim {
+    @apply bg-panel font-normal text-dim active:bg-panel2;
+  }
   .v-oui {
     background: linear-gradient(160deg, #16a34a, #0d7a36);
   }
@@ -46,20 +52,31 @@ body {
   }
 }
 
-.leaflet-control-layers-toggle,
-.leaflet-retina .leaflet-control-layers-toggle {
-  width: 26px;
-  height: 26px;
-  background-size: 18px 18px;
+.leaflet-bar a.map-ctl {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1d6ef2;
 }
-.leaflet-touch .leaflet-control-layers-toggle,
-.leaflet-touch.leaflet-retina .leaflet-control-layers-toggle {
-  width: 30px;
-  height: 30px;
-  background-size: 20px 20px;
+.leaflet-bar a.map-ctl svg {
+  width: 16px;
+  height: 16px;
 }
-.leaflet-control-layers {
-  border-radius: 4px;
+.leaflet-touch .leaflet-bar a.map-ctl svg {
+  width: 18px;
+  height: 18px;
+}
+.leaflet-bar a.locate-me[aria-busy="true"] svg {
+  animation: map-ctl-spin 1s linear infinite;
+}
+@keyframes map-ctl-spin {
+  to { transform: rotate(360deg); }
+}
+.leaflet-bar a.pick-place[aria-pressed="true"],
+.leaflet-bar a.pick-place[aria-pressed="true"]:hover,
+.leaflet-bar a.pick-place[aria-pressed="true"]:focus {
+  background-color: #1d6ef2;
+  color: #fff;
 }
 
 input[type="search"]::-webkit-search-cancel-button,
