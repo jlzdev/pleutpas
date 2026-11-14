@@ -8,40 +8,46 @@ import TimelineCard from './components/TimelineCard.vue'
 import RadarCard from './components/RadarCard.vue'
 import DayCard from './components/DayCard.vue'
 import InstallBanner from './components/InstallBanner.vue'
+import WelcomeCard from './components/WelcomeCard.vue'
 
 const settingsOpen = ref(false)
 const version = __APP_VERSION__
 
-const route = computed(() => routeLabel(place.value, dest.value))
-const labels = computed(() => routeLabels(place.value, dest.value))
-watchEffect(() => { document.title = route.value + ' - Pleut pas ? Je peux rouler à vélo ?' })
+const route = computed(() => (place.value ? routeLabel(place.value, dest.value) : ''))
+const labels = computed<[string, string | null]>(() => (place.value ? routeLabels(place.value, dest.value) : ['Choisis ton lieu', null]))
+watchEffect(() => { document.title = (route.value ? route.value + ' - ' : '') + 'Pleut pas ? Je peux rouler à vélo ?' })
 const updatedStale = computed(() => fetchedAt.value !== null && nowTick.value - fetchedAt.value > 10 * 60 * 1000)
-const zoneNote = computed(() => displayZone.value && displayZone.value !== deviceZone ? ', heure de ' + placeTown(place.value) : '')
+const zoneNote = computed(() => displayZone.value && displayZone.value !== deviceZone && place.value ? ', heure de ' + placeTown(place.value) : '')
 const updatedText = computed(() => fetchedAt.value === null
   ? ''
   : 'Données de ' + fmtHM(fetchedAt.value) + zoneNote.value + (updatedStale.value ? ' (anciennes, actualise)' : ''))
 </script>
 
 <template>
-  <header class="mx-auto flex max-w-[668px] items-center gap-2 px-3.5 pb-1 pt-3 desk:max-w-[888px] desk:pt-4">
+  <header class="mx-auto flex max-w-[640px] items-center gap-2 px-3.5 pb-1 pt-3 desk:max-w-[860px] desk:pt-4">
     <h1 class="min-w-0 flex-1 text-xl font-bold">
       Je peux rouler ?
       <small class="block truncate text-sm font-normal text-dim"><span class="font-semibold text-ink">{{ labels[0] }}</span><template v-if="labels[1]"> vers <span class="font-semibold text-ink">{{ labels[1] }}</span></template></small>
     </h1>
-    <button v-if="dest" class="iconbtn" aria-label="Inverser le sens du trajet" title="Inverser le sens du trajet" @click="swapPlaces">⇄&#xFE0E;</button>
-    <button class="iconbtn" aria-label="Réglages" @click="settingsOpen = !settingsOpen">⚙&#xFE0E;</button>
-    <button class="iconbtn hidden desk:inline-block" aria-label="Actualiser" @click="refresh(true)">
-      <span class="inline-block" :class="{ 'animate-spin': refreshing }">⟳</span>
-    </button>
+    <template v-if="place">
+      <button v-if="dest" class="iconbtn" aria-label="Inverser le sens du trajet" title="Inverser le sens du trajet" @click="swapPlaces">⇄&#xFE0E;</button>
+      <button class="iconbtn" aria-label="Réglages" @click="settingsOpen = !settingsOpen">⚙&#xFE0E;</button>
+      <button class="iconbtn hidden desk:inline-block" aria-label="Actualiser" @click="refresh(true)">
+        <span class="inline-block" :class="{ 'animate-spin': refreshing }">⟳</span>
+      </button>
+    </template>
   </header>
   <main class="mx-auto flex max-w-[640px] flex-col gap-3.5 px-3.5 pb-6 pt-2.5 desk:max-w-[860px]">
     <InstallBanner />
-    <VerdictCard />
-    <SettingsCard v-show="settingsOpen" @close="settingsOpen = false" />
-    <TimelineCard />
-    <RadarCard />
-    <DayCard />
-    <div class="text-center text-xs" :class="updatedStale ? 'text-amber-500' : 'text-dim'">{{ updatedText }}</div>
+    <template v-if="place">
+      <VerdictCard :place="place" />
+      <SettingsCard v-show="settingsOpen" :place="place" @close="settingsOpen = false" />
+      <TimelineCard />
+      <RadarCard :place="place" />
+      <DayCard />
+      <div class="text-center text-xs" :class="updatedStale ? 'text-amber-500' : 'text-dim'">{{ updatedText }}</div>
+    </template>
+    <WelcomeCard v-else />
     <section class="card text-sm text-dim">
       <h2 class="hdr">Comment ça marche</h2>
       <p>Pleut pas ? répond à une question simple : partir à vélo maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>

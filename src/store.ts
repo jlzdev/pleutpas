@@ -1,8 +1,6 @@
 import { computed, ref } from 'vue'
 import {
-  BESANCON,
   cleanName,
-  clockParts,
   displayZone,
   estimatedTripMin,
   hourlyEndMs,
@@ -10,7 +8,6 @@ import {
   isMfPointUsable,
   MAX_TRIP_MIN,
   MIN_TRIP_MIN,
-  TOMORROW_FROM_HOUR,
   tripPositions,
   type FrameSample,
   type MfEntry,
@@ -69,7 +66,7 @@ function placeFromQuery(q: URLSearchParams, latKey: string, lonKey: string, name
   return { name: cleanName(q.get(nameKey)) || lat.toFixed(2) + ' ' + lon.toFixed(2), lat, lon }
 }
 
-function loadPlaces(): [Place, Place | null] {
+function loadPlaces(): [Place | null, Place | null] {
   const q = new URLSearchParams(location.search)
   const keys = ['lat', 'lon', 'nom', 'alat', 'alon', 'anom']
   const fromUrl = keys.some((k) => q.has(k))
@@ -86,7 +83,8 @@ function loadPlaces(): [Place, Place | null] {
   let dest: Place | null = null
   try { place = parsePlace(JSON.parse(lsGet(KEY_PLACE) ?? 'null')) } catch { /* entree corrompue */ }
   try { dest = parsePlace(JSON.parse(lsGet(KEY_DEST) ?? 'null')) } catch { /* entree corrompue */ }
-  return [place ?? BESANCON, place ? dest : null]
+  if (!place) lsRemove(KEY_DEST)
+  return [place, place ? dest : null]
 }
 
 export type Basemap = 'plan' | 'velo'
@@ -101,7 +99,7 @@ function loadTrip(): number {
   return clampTrip(parseInt(lsGet(KEY_TRIP) ?? '', 10) || 15)
 }
 
-export const place = ref<Place>(initialPlace)
+export const place = ref<Place | null>(initialPlace)
 export const dest = ref<Place | null>(initialDest)
 export const basemap = ref<Basemap>(lsGet(KEY_BASEMAP) === 'velo' ? 'velo' : 'plan')
 export const tripMin = ref(loadTrip())
@@ -126,8 +124,9 @@ export const slotsDest = computed<Slot[]>(() => forecastDest.value?.rain ?? [])
 
 export const trip = computed<Trip>(() => {
   const hasDest = dest.value !== null
+  const p = place.value
   return {
-    positions: tripPositions(place.value, dest.value),
+    positions: p ? tripPositions(p, dest.value) : [],
     hasDest,
     mf: [rainMF.value, hasDest ? rainMFDest.value : rainMF.value],
     slots: [slots.value, hasDest ? slotsDest.value : slots.value],
@@ -186,6 +185,7 @@ let refreshSeq = 0
 export async function refresh(fromButton = false): Promise<void> {
   const seq = ++refreshSeq
   const p = place.value
+  if (!p) return
   const d = dest.value
   const places = d ? [p, d] : [p]
   refreshing.value = true
@@ -193,6 +193,9 @@ export async function refresh(fromButton = false): Promise<void> {
   if (fromButton) recenterTick.value++
   const futP = fetchFutureRain().catch(() => null)
   const now = Date.now()
+  const abroad = (m: MfForecast | null) => !!m?.country && !m.country.startsWith('FR')
+  const earlyOm = places.filter((_, i) => abroad(i === 0 ? forecastMF.value : forecastMFDest.value))
+  const earlyP = earlyOm.length ? fetchWeather(earlyOm, now).catch(() => null) : null
   const [r, rd, f, fd] = await Promise.allSettled([
     fetchRain(p),
     d ? fetchRain(d) : Promise.resolve(null),
@@ -203,20 +206,20 @@ export async function refresh(fromButton = false): Promise<void> {
   const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
   const rain = settled(r)
   const rainDest = settled(rd)
-  const fc = settled(f)
-  const fcDest = settled(fd)
-  // Meteo-France des que le lieu est en France et couvert au pas horaire, sinon Open-Meteo
-  // (hors de France, ou en secours silencieux si l'endpoint MF ne repond pas)
+  const fc = f.status === 'fulfilled' ? f.value : forecastMF.value
+  const fcDest = fd.status === 'fulfilled' ? fd.value : forecastMFDest.value
   const points: (PointForecast | null)[] = [fc, fcDest].slice(0, places.length)
     .map((m) => (m && isMfPointUsable(m, now) ? m.point : null))
   const needOm = places.filter((_, i) => !points[i])
   if (needOm.length) {
-    const om = await fetchWeather(needOm, now).catch(() => null)
+    const got = new Map<Place, PointForecast>()
+    const early = earlyP ? await earlyP : null
+    early?.forEach((pt, i) => got.set(earlyOm[i], pt))
+    const missing = needOm.filter((pl) => !got.has(pl))
+    const om = missing.length ? await fetchWeather(missing, now).catch(() => null) : null
     if (seq !== refreshSeq) return
-    if (om) {
-      let k = 0
-      points.forEach((pt, i) => { if (!pt) points[i] = om[k++] ?? null })
-    }
+    om?.forEach((pt, i) => got.set(missing[i], pt))
+    points.forEach((pt, i) => { if (!pt) points[i] = got.get(places[i]) ?? null })
   }
   const key = cacheKey(p, d)
   if (points[0]) {
@@ -240,10 +243,8 @@ export async function refresh(fromButton = false): Promise<void> {
   rainMFDest.value = rainDest?.entries ?? null
   forecastMF.value = fc
   forecastMFDest.value = fcDest
-  void fetchVigilance(
-    [fc?.dept ?? rain?.dept ?? null, d ? (fcDest?.dept ?? rainDest?.dept ?? null) : null],
-    clockParts(Date.now()).h >= TOMORROW_FROM_HOUR,
-  ).catch(() => null).then((v) => { if (seq === refreshSeq) vigilance.value = v })
+  void fetchVigilance([fc?.dept ?? rain?.dept ?? null, d ? (fcDest?.dept ?? rainDest?.dept ?? null) : null])
+    .then((v) => { if (seq === refreshSeq) vigilance.value = v }, () => undefined)
   const fut = await futP
   if (seq !== refreshSeq) return
   futureRain.value = hasFuture(fut) ? fut : (hasFuture(futureRain.value) ? futureRain.value : null)
@@ -276,10 +277,12 @@ export function setPlace(p: Place): void {
 }
 
 export function setDest(d: Place | null): void {
+  const p = place.value
+  if (!p) return
   dest.value = d
   if (d) {
     lsSet(KEY_DEST, JSON.stringify(d))
-    setTripMin(clampTrip(estimatedTripMin(place.value, d)))
+    setTripMin(clampTrip(estimatedTripMin(p, d)))
   } else {
     lsRemove(KEY_DEST)
   }
@@ -288,8 +291,8 @@ export function setDest(d: Place | null): void {
 
 export function swapPlaces(): void {
   const d = dest.value
-  if (!d) return
   const p = place.value
+  if (!d || !p) return
   place.value = d
   dest.value = p
   lsSet(KEY_PLACE, JSON.stringify(d))
@@ -315,7 +318,7 @@ export function setReminderTime(v: string): void {
 
 export function initStore(): void {
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState !== 'visible') return
+    if (document.visibilityState !== 'visible' || !place.value) return
     if (fetchedAt.value === null || Date.now() - fetchedAt.value > 5 * 60 * 1000) {
       void refresh(false)
     } else {
@@ -323,7 +326,7 @@ export function initStore(): void {
     }
   })
   setInterval(() => { nowTick.value = Date.now() }, 60 * 1000)
-  void refresh(false)
+  if (place.value) void refresh(false)
 }
 
 declare global {

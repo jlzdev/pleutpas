@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, place, radarPending, refreshing, trip, tripMin, vigilance } from '../store'
-import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, fmtVigilance, routeLabel, winterNote, type InfoText, type VerdictView } from '../lib/meteo'
+import { dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, radarPending, refreshing, trip, tripMin, vigilance } from '../store'
+import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, fmtVigilance, routeLabel, winterNote, type InfoText, type Place, type VerdictView } from '../lib/meteo'
+
+const props = defineProps<{ place: Place }>()
 
 const verdict = computed<VerdictView>(() => {
   if (!forecast.value) {
@@ -20,10 +22,9 @@ const conditions = computed(() => {
   const c = conditionsAt(forecast.value.conditions, nowTick.value)
   if (!c) return null
   const d = dest.value
-  return fmtConditions(c, d ? bearingDeg(place.value, d) : null)
+  return fmtConditions(c, d ? bearingDeg(props.place, d) : null)
 })
 
-// neige, verglas et vigilance : des informations comme la temperature, jamais un verdict
 const notes = computed<InfoText[]>(() => {
   if (!forecast.value || verdict.value.state === 'inconnu') return []
   const out: InfoText[] = []
@@ -36,7 +37,7 @@ const notes = computed<InfoText[]>(() => {
 
 const foot = computed(() => {
   const d = dest.value
-  const head = d ? routeLabel(place.value, d) + ', ' + tripMin.value + ' min' : 'Trajet de ' + tripMin.value + ' min'
+  const head = d ? routeLabel(props.place, d) + ', ' + tripMin.value + ' min' : 'Trajet de ' + tripMin.value + ' min'
   return head + ', données de ' + fmtHM(fetchedAt.value as number)
 })
 </script>

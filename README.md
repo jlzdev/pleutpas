@@ -3,7 +3,7 @@
 Est-ce que je peux prendre mon vélo maintenant, et sinon à quelle heure ? Gros verdict
 OUI / PLUIE selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
 heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée.
-Lieu configurable (recherche de ville, géolocalisation ou URL), Besançon par défaut,
+Lieu choisi au premier lancement (géolocalisation, recherche de ville ou d'adresse, ou URL), mémorisé sur l'appareil,
 arrivée facultative (la pluie est alors lue tout le long du trajet, en ligne droite, à
 l'heure où l'on passe à chaque endroit, et le vent devient "de face", "de dos" ou "de
 travers"),

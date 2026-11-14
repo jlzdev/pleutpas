@@ -46,12 +46,14 @@ export interface MfEntry {
 
 export interface MfHour {
   start: number
+  end: number
   snowCm: number
   desc: string
 }
 
 export interface MfHazard {
   start: number
+  end: number
   freezingPct: number
 }
 
@@ -154,7 +156,6 @@ export function bearingDeg(a: Place, b: Place): number {
 export const INTENSITY_MIN = palette.slotMin
 export const WET_MM = palette.wetMm
 export const LIGHT_MAX_MM = palette.lightMaxMm
-export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
 // bbox des frames Meteo-France (France metro et abords immediats), limite de la recherche,
 // de la geolocalisation et du deplacement de la carte
 export const FRANCE_BOUNDS: [[number, number], [number, number]] = [[41, -5.5], [51.5, 10]]
@@ -191,8 +192,14 @@ export function inFranceBounds(lat: number, lon: number): boolean {
   return lat >= south && lat <= north && lon >= west && lon <= east
 }
 
-const STALE_MS = 60 * 60 * 1000
+export const HOUR_MS = 3600000
+const STALE_MS = HOUR_MS
 export const STEP_5MIN_MS = 5 * 60 * 1000
+const TIMELINE_CELLS = 24
+
+export function timelineEndMs(nowMs: number): number {
+  return Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + TIMELINE_CELLS * STEP_5MIN_MS
+}
 const LEGERE_MM = palette.steps.find((s) => s.name === 'legere')?.mm ?? LIGHT_MAX_MM
 
 // fuseau du lieu consulte (fourni par Open-Meteo), undefined = celui de l'appareil ;
@@ -259,7 +266,7 @@ export function fmtDay(tMs: number, nowMs: number): string {
   return t.weekday
 }
 
-function fmtDayHM(tMs: number, nowMs: number): string {
+export function fmtDayHM(tMs: number, nowMs: number): string {
   const d = fmtDay(tMs, nowMs)
   return d ? d + ' ' + fmtHM(tMs) : fmtHM(tMs)
 }
@@ -325,22 +332,12 @@ export function fmtConditions(c: Conditions, headingDeg: number | null = null): 
 
 export const FREEZING_MIN_PCT = 30
 export const FREEZING_STRONG_PCT = 60
-export const TOMORROW_FROM_HOUR = 16
-const HOUR_MS = 3600000
-const HAZARD_STEP_MS = 3 * HOUR_MS
-const TIMELINE_MS = 24 * STEP_5MIN_MS
 const WINTER_RANK: Record<WinterInfo['kind'], number> = { risque: 1, neige: 2, verglacant: 3 }
 const VIGILANCE_WORDS = ['', 'verte', 'jaune', 'orange', 'rouge']
 
-// prevision mobile Meteo-France sur l'horizon de la frise (2 h), a titre d'information :
-// pluie verglacante annoncee, sinon neige, sinon risque de verglas calcule par Meteo-France
 export function winterAt(fc: MfForecast, nowMs: number): WinterInfo | null {
-  const endMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + TIMELINE_MS
-  const hours = fc.hours.filter((h, i) => {
-    const next = fc.hours[i + 1]
-    const endOfStep = next && next.start > h.start ? next.start : h.start + HOUR_MS
-    return endOfStep > nowMs && h.start < endMs
-  })
+  const endMs = timelineEndMs(nowMs)
+  const hours = fc.hours.filter((h) => h.end > nowMs && h.start < endMs)
   const info = (h: MfHour, kind: WinterInfo['kind']): WinterInfo => ({ kind, time: h.start, now: h.start <= nowMs, pct: 0 })
   const ice = hours.find((h) => h.desc.toLowerCase().includes('vergla'))
   if (ice) return info(ice, 'verglacant')
@@ -348,10 +345,17 @@ export function winterAt(fc: MfForecast, nowMs: number): WinterInfo | null {
   if (snow) return info(snow, 'neige')
   let worst: MfHazard | null = null
   for (const hz of fc.hazards) {
-    if (hz.start + HAZARD_STEP_MS > nowMs && hz.start < endMs && (!worst || hz.freezingPct > worst.freezingPct)) worst = hz
+    if (hz.end > nowMs && hz.start < endMs && (!worst || hz.freezingPct > worst.freezingPct)) worst = hz
   }
   if (worst && worst.freezingPct >= FREEZING_MIN_PCT) return { kind: 'risque', time: worst.start, now: true, pct: worst.freezingPct }
   return null
+}
+
+function worseWinter(a: WinterInfo, b: WinterInfo): boolean {
+  if (WINTER_RANK[b.kind] !== WINTER_RANK[a.kind]) return WINTER_RANK[b.kind] > WINTER_RANK[a.kind]
+  if (b.kind === 'risque') return b.pct > a.pct
+  if (b.now !== a.now) return b.now
+  return b.time < a.time
 }
 
 export function fmtWinter(w: WinterInfo, nowMs: number, where = ''): InfoText {
@@ -367,7 +371,7 @@ export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: 
   const wa = a ? winterAt(a, nowMs) : null
   const wb = hasDest && b ? winterAt(b, nowMs) : null
   if (wa && wb) {
-    return WINTER_RANK[wb.kind] > WINTER_RANK[wa.kind]
+    return worseWinter(wa, wb)
       ? fmtWinter(wb, nowMs, ' à l\'arrivée')
       : fmtWinter(wa, nowMs, ' au départ')
   }
@@ -378,10 +382,13 @@ export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: 
 
 export function fmtVigilance(v: Vigilance | null): InfoText | null {
   if (!v) return null
-  const level = (c: number | null) => (c !== null && c >= 2 ? Math.min(c, 4) : null)
+  const level = (c: number | null) => (c !== null && c >= 2 ? c : null)
   const today = level(v.today)
-  if (today) return { text: 'Vigilance ' + VIGILANCE_WORDS[today] + ' neige-verglas.', strong: today >= 3 }
   const tomorrow = level(v.tomorrow)
+  if (today && tomorrow && tomorrow > today) {
+    return { text: 'Vigilance ' + VIGILANCE_WORDS[today] + ' neige-verglas, ' + VIGILANCE_WORDS[tomorrow] + ' demain.', strong: tomorrow >= 3 }
+  }
+  if (today) return { text: 'Vigilance ' + VIGILANCE_WORDS[today] + ' neige-verglas.', strong: today >= 3 }
   if (tomorrow) return { text: 'Vigilance ' + VIGILANCE_WORDS[tomorrow] + ' neige-verglas demain.', strong: tomorrow >= 3 }
   return null
 }
@@ -504,7 +511,7 @@ function endsEndMs(trip: Trip): number {
 }
 
 function firstWetMs(trip: Trip, fromMs: number): number {
-  const endMs = Math.min(fromMs + 48 * 3600000, endsEndMs(trip))
+  const endMs = Math.min(fromMs + 48 * HOUR_MS, endsEndMs(trip))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
     const a = mmAtMs(trip.slots[0], trip.mf[0], t)
     if (a !== null && a >= WET_MM) return t
@@ -532,7 +539,7 @@ function firstWetOnTrip(trip: Trip, fromMs: number, durMin: number): WindowMax |
 }
 
 function nextWetDepartureMs(trip: Trip, fromMs: number, durMin: number): number {
-  const endMs = Math.min(fromMs + 48 * 3600000, endsEndMs(trip))
+  const endMs = Math.min(fromMs + 48 * HOUR_MS, endsEndMs(trip))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
     const w = maxMmWindow(trip, t, durMin)
     if (w === null) return -1
@@ -542,7 +549,7 @@ function nextWetDepartureMs(trip: Trip, fromMs: number, durMin: number): number 
 }
 
 function nextDryDepartureMs(trip: Trip, fromMs: number, durMin: number): number {
-  const endMs = Math.min(fromMs + 48 * 3600000, endsEndMs(trip))
+  const endMs = Math.min(fromMs + 48 * HOUR_MS, endsEndMs(trip))
   for (let t = fromMs; t < endMs; t = next5min(t)) {
     if (isDryWindowMs(trip, t, durMin)) return t
   }
@@ -572,16 +579,39 @@ function whereWord(trip: Trip, pos: number): string {
   return end === 0 ? ' au départ' : end === 1 ? ' à l\'arrivée' : ' en route'
 }
 
-export function intensityColor(mm15: number): string | null {
+function stepName(mm15: number): string | null {
   let name: string | null = null
   for (const s of palette.steps) {
     if (mm15 >= s.mm) name = s.name
   }
+  return name
+}
+
+export function intensityColor(mm15: number): string | null {
+  const name = stepName(mm15)
   return name ? 'var(--color-' + name + ')' : null
 }
 
 function lightWord(mm15: number): string {
   return mm15 < LEGERE_MM ? 'Bruine' : 'Pluie faible'
+}
+
+const INTENSITY_WORDS: Record<string, string> = {
+  traces: 'traces', bruine: 'bruine', legere: 'pluie légère', modere: 'pluie modérée',
+  fort: 'pluie forte', tresfort: 'pluie très forte', grele: 'grêle',
+}
+
+export function intensityWord(mm15: number): string {
+  return INTENSITY_WORDS[stepName(mm15) ?? ''] ?? 'sec'
+}
+
+export function fmtMm(v: number): string {
+  return (v >= 10 ? Math.round(v).toString() : v.toFixed(1)).replace('.', ',') + ' mm'
+}
+
+function cellTitle(t: number, mm15: number): string {
+  return fmtHM(t) + ' à ' + fmtHM(t + STEP_5MIN_MS) + ' : ' + intensityWord(mm15)
+    + (mm15 >= WET_MM ? ', ' + fmtMm(mm15) + ' par quart d\'heure' : '')
 }
 
 export interface TimelineCell {
@@ -598,7 +628,7 @@ export function timelineCells(trip: Trip, nowMs: number, tripMin: number): Timel
   const firstMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS
   const cells: TimelineCell[] = []
   if (trip.hasDest) {
-    for (let i = 0; i < 24; i++) {
+    for (let i = 0; i < TIMELINE_CELLS; i++) {
       const t = firstMs + i * STEP_5MIN_MS
       const w = maxMmWindow(trip, i === 0 ? nowMs : t, tripMin)
       if (!w) break
@@ -606,18 +636,18 @@ export function timelineCells(trip: Trip, nowMs: number, tripMin: number): Timel
         start: t,
         wet: w.mm >= WET_MM,
         color: intensityColor(w.mm),
-        title: 'Départ à ' + fmtHM(t) + ' : ' + w.mm.toFixed(1) + ' mm / 15 min au plus sur le trajet',
+        title: 'Départ à ' + fmtHM(t) + ' : ' + intensityWord(w.mm) + (w.mm >= WET_MM ? ', au plus ' + fmtMm(w.mm) + ' par quart d\'heure sur le trajet' : ' sur tout le trajet'),
       })
     }
     return cells
   }
   const [slots, mf] = [trip.slots[0], trip.mf[0]]
-  for (let i = 0; i < 24; i++) {
+  for (let i = 0; i < TIMELINE_CELLS; i++) {
     const t = firstMs + i * STEP_5MIN_MS
     const e = mfEntryAt(mf, t)
     if (e) {
       const mm = mfLevelMm(e.level)
-      cells.push({ start: t, wet: mm >= WET_MM, color: intensityColor(mm), title: fmtHM(t) + ' : ' + e.desc })
+      cells.push({ start: t, wet: mm >= WET_MM, color: intensityColor(mm), title: fmtHM(t) + ' à ' + fmtHM(t + STEP_5MIN_MS) + ' : ' + e.desc.toLowerCase() + ' (Météo-France pluie dans l\'heure)' })
       continue
     }
     const s = slotAt(slots, t)
@@ -626,7 +656,7 @@ export function timelineCells(trip: Trip, nowMs: number, tripMin: number): Timel
       start: t,
       wet: s.mm >= WET_MM,
       color: intensityColor(s.mm),
-      title: fmtHM(t) + ' : ' + s.mm.toFixed(1) + ' mm / 15 min',
+      title: cellTitle(t, s.mm),
     })
   }
   return cells
@@ -643,8 +673,7 @@ export interface DayCell {
 // que lit le verdict au-dela de l'heure MF, coherence par construction
 export function dayCells(fc: PointForecast | null, nowMs: number): DayCell[] {
   if (!fc) return []
-  const bandEndMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + TIMELINE_MS
-  const firstHourMs = Math.floor(bandEndMs / HOUR_MS) * HOUR_MS
+  const firstHourMs = Math.floor(timelineEndMs(nowMs) / HOUR_MS) * HOUR_MS
   const cells: DayCell[] = []
   for (let i = 0; i < 24; i++) {
     const h0 = firstHourMs + i * HOUR_MS

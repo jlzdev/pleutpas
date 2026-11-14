@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { basemap, dest, futureRain, place, recenterTick, setBasemap } from '../store'
-import { bearingDeg, fmtHM, FRANCE_BOUNDS } from '../lib/meteo'
+import { basemap, dest, futureRain, recenterTick, setBasemap } from '../store'
+import { bearingDeg, fmtHM, FRANCE_BOUNDS, type Place } from '../lib/meteo'
 import { rainLayer, type RainLayer } from '../lib/rainLayer'
 import { loadFrameImage } from '../lib/api'
 
@@ -12,6 +12,8 @@ interface ViewFrame {
   url: string
   bounds: [[number, number], [number, number]]
 }
+
+const props = defineProps<{ place: Place }>()
 
 const mapEl = ref<HTMLDivElement | null>(null)
 const frameIdx = ref(0)
@@ -196,14 +198,15 @@ function onResize(): void {
 
 function recenter(): void {
   if (!map) return
-  const a: L.LatLngTuple = [place.value.lat, place.value.lon]
+  const p = props.place
+  const a: L.LatLngTuple = [p.lat, p.lon]
   marker?.setLatLng(a)
   const d = dest.value
   if (d && line && destMarker) {
     const b: L.LatLngTuple = [d.lat, d.lon]
     line.setLatLngs([a, b]).addTo(map)
     destMarker.setLatLng(b).addTo(map)
-    const heading = bearingDeg(place.value, d)
+    const heading = bearingDeg(p, d)
     arrows.forEach((m, i) => {
       const f = ARROW_AT[i]
       m.setLatLng([a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f])
@@ -231,13 +234,14 @@ function arrowIcon(heading: number): L.DivIcon {
 
 onMounted(() => {
   if (!mapEl.value) return
+  const here: L.LatLngTuple = [props.place.lat, props.place.lon]
   map = L.map(mapEl.value, {
     zoomControl: false,
     maxZoom: MAX_ZOOM,
     minZoom: 5,
     maxBounds: L.latLngBounds(FRANCE_BOUNDS).pad(0.05),
     maxBoundsViscosity: 1,
-  }).setView([place.value.lat, place.value.lon], POINT_ZOOM)
+  }).setView(here, POINT_ZOOM)
   L.control.zoom({ position: 'topright' }).addTo(map)
   const plan = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: MAX_ZOOM, attribution: '© OpenStreetMap | Météo-France',
@@ -249,7 +253,7 @@ onMounted(() => {
   L.control.layers({ 'Plan': plan, 'Vélo (CyclOSM)': velo }, undefined, { position: 'topright' }).addTo(map)
   map.on('baselayerchange', (e: L.LayersControlEvent) => setBasemap(e.layer === velo ? 'velo' : 'plan'))
   layer = rainLayer(FRANCE_BOUNDS, { opacity: 0.85, zIndex: 5 }).addTo(map)
-  marker = L.circleMarker([place.value.lat, place.value.lon], {
+  marker = L.circleMarker(here, {
     radius: 7, color: '#fff', weight: 2, fillColor: '#1d6ef2', fillOpacity: 1,
   }).addTo(map)
   destMarker = L.circleMarker([0, 0], {

@@ -2,7 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { searchPlaces, type GeoNear, type GeoResult } from '../lib/api'
 
-const props = defineProps<{ id: string; near: GeoNear; clearable?: boolean }>()
+const props = defineProps<{ id: string; near?: GeoNear; clearable?: boolean }>()
 const emit = defineEmits<{ pick: [r: GeoResult]; clear: [] }>()
 
 const MIN_CHARS = 3

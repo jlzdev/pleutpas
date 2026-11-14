@@ -6,6 +6,46 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.8.0] - 2026-11-14
+
+### Améliorations
+
+- Suite de la journée : le fond bleu de probabilité (Météo-France, par tranche de 3 h et
+  par paliers de 10 %) est plafonné à 60 % de la hauteur pour ne plus écraser les barres de
+  pluie quand il vaut 100 %, et la légende indique la source et le pas (Météo-France par
+  tranche de 3 h, Open-Meteo par heure). Infobulles réécrites en clair, sur la journée ("17h à
+  18h : 5,7 mm de pluie, probabilité 100 %") comme sur la frise ("15h20 à 15h25 : pluie
+  légère, 0,3 mm par quart d'heure").
+
+### Corrections
+
+- Neige et risque de verglas étaient lus une heure (et 3 h pour le risque) trop tard : la
+  prévision Météo-France horodate la fin de chaque période, comme pour la pluie.
+- La vigilance de demain est demandée toute la journée (elle est servie dès le bulletin du
+  matin) et, quand elle est plus sévère que celle du jour, la phrase donne les deux
+  ("Vigilance jaune neige-verglas, orange demain.").
+- Avec une arrivée, l'info hiver retient le lieu le plus exposé même à type égal (risque
+  plus fort, ou neige en cours plutôt qu'annoncée).
+- Une erreur passagère de Météo-France ne fait plus disparaître l'info hiver ni la
+  vigilance, la valeur précédente est conservée jusqu'au rafraîchissement suivant.
+- Une heure sans cumul dans la prévision Météo-France est sautée au lieu d'interrompre la
+  série.
+- Hors de France, Open-Meteo est lancé en parallèle de Météo-France dès le second
+  chargement, le verdict n'attend plus deux appels successifs.
+- Une arrivée mémorisée n'est plus ressuscitée quand le lieu de départ mémorisé est
+  illisible.
+- Une géolocalisation en cours est annulée dès qu'on choisit un lieu à la main, son résultat
+  tardif n'écrase plus le choix.
+- L'infobulle de la suite de la journée dit "pas de pluie" avec le même critère que
+  l'étiquette en gras et la phrase de synthèse.
+
+### Nouveautés
+
+- Plus de lieu par défaut : au premier lancement (ou si le lieu mémorisé est illisible), une
+  carte d'accueil propose d'utiliser sa position ou de chercher sa ville ou son adresse, et
+  rien ne se charge tant qu'un lieu n'est pas choisi. Besançon disparaît du code. Les liens
+  partagés avec coordonnées continuent de poser le lieu directement.
+
 ## [1.7.0] - 2026-11-14
 
 ### Données
@@ -28,6 +68,10 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 - Pied de page : Météo-France en tête, adresse de contact rétablie, Open-Meteo en dernier
   avec la mention "repli".
+- L'en-tête est aligné sur la largeur des cartes sur grand écran (il dépassait de 14 px de
+  chaque côté).
+- Réglages : le rappel agenda, facultatif, est replié par défaut derrière une ligne "Rappel
+  dans mon agenda" à déplier.
 
 ## [1.6.0] - 2026-11-14
 

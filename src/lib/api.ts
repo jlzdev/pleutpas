@@ -2,6 +2,7 @@ import palette from './palette.json'
 import {
   cleanName,
   FRANCE_BOUNDS,
+  HOUR_MS,
   inFranceBounds,
   INTENSITY_MIN,
   type ConditionSpan,
@@ -28,7 +29,6 @@ interface OpenMeteoPayload {
   hourly: { time: number[]; precipitation_probability: (number | null)[] }
 }
 
-const HOUR_MS = 3600000
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 export interface FutureFrame {
@@ -90,7 +90,6 @@ function fromOpenMeteo(p: OpenMeteoPayload, nowMs: number): PointForecast {
   return { source: 'open-meteo', timezone: p.timezone ?? null, rain, conditions, proba }
 }
 
-// repli et hors de France : un seul appel pour tous les lieux demandes
 export async function fetchWeather(places: Place[], nowMs: number): Promise<PointForecast[]> {
   const url = 'https://api.open-meteo.com/v1/forecast'
     + '?latitude=' + places.map((p) => p.lat).join(',') + '&longitude=' + places.map((p) => p.lon).join(',')
@@ -153,7 +152,7 @@ function mfRain(entries: { f: MfRecord; t: number }[], nowMs: number): Slot[] {
   const rain: Slot[] = []
   for (const { f, t } of entries) {
     const field = CUMUL_FIELDS.find(([r, s]) => isNum(f[r]) || isNum(f[s]))
-    if (!field) break
+    if (!field) continue
     const [r, s, dur] = field
     const { start, end } = cumulWindow(t, dur)
     const prev = rain[rain.length - 1]
@@ -215,14 +214,20 @@ export async function fetchForecastMF(place: Place, nowMs: number): Promise<MfFo
     .map((f) => ({ f, t: timeOf(f.time) }))
     .filter((e) => Number.isFinite(e.t))
   const probaList = Array.isArray(p.probability_forecast) ? (p.probability_forecast as MfRecord[]) : []
-  const hours = entries.map(({ f, t }) => ({
-    start: t,
-    snowCm: num(f.snow_1h),
+  const hours = entries.map(({ f, t }, i) => ({
+    start: i > 0 ? entries[i - 1].t : t - HOUR_MS,
+    end: t,
+    snowCm: num(f.snow_1h) || num(f.snow_3h) || num(f.snow_6h),
     desc: typeof f.weather_description === 'string' ? f.weather_description : '',
   }))
+  const hazardTimes = probaList.map((h) => timeOf(h.time))
   const hazards = probaList
-    .map((h) => ({ start: timeOf(h.time), freezingPct: num(h.freezing_hazard) }))
-    .filter((h) => Number.isFinite(h.start))
+    .map((h, i) => {
+      const t = hazardTimes[i]
+      const prev = i > 0 ? hazardTimes[i - 1] : NaN
+      return { start: Number.isFinite(prev) ? prev : t - 3 * HOUR_MS, end: t, freezingPct: num(h.freezing_hazard) }
+    })
+    .filter((h) => Number.isFinite(h.end))
   return {
     dept: deptOf(p.french_department),
     country: typeof p.country === 'string' ? p.country : null,
@@ -239,9 +244,8 @@ export async function fetchForecastMF(place: Place, nowMs: number): Promise<MfFo
 }
 
 // vigilance departementale de l'app mobile (meme webservice), couleur 1 vert a 4 rouge du
-// phenomene neige-verglas, echeance J ou J1 (disponible a partir de 16 h environ)
+// phenomene neige-verglas, echeance J ou J1 (J1 servie des le bulletin du matin)
 export async function fetchWarning(dept: string, echeance: 'J' | 'J1'): Promise<number | null> {
-  if (!DEPT_RE.test(dept)) return null
   const res = await fetch('https://webservice.meteofrance.com/v3/warning/currentphenomenons?domain='
     + encodeURIComponent(dept) + '&depth=1&echeance=' + echeance + '&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance vigilance http ' + res.status)
@@ -252,7 +256,7 @@ export async function fetchWarning(dept: string, echeance: 'J' | 'J1'): Promise<
   return typeof color === 'number' && color >= 1 && color <= 4 ? color : null
 }
 
-export async function fetchVigilance(depts: (string | null)[], withTomorrow: boolean): Promise<Vigilance | null> {
+export async function fetchVigilance(depts: (string | null)[]): Promise<Vigilance | null> {
   const list = [...new Set(depts.filter((d): d is string => d !== null))]
   if (!list.length) return null
   const worst = async (echeance: 'J' | 'J1'): Promise<number | null> => {
@@ -263,7 +267,7 @@ export async function fetchVigilance(depts: (string | null)[], withTomorrow: boo
     }
     return m
   }
-  const [today, tomorrow] = await Promise.all([worst('J'), withTomorrow ? worst('J1') : Promise.resolve(null)])
+  const [today, tomorrow] = await Promise.all([worst('J'), worst('J1')])
   return { today, tomorrow }
 }
 
