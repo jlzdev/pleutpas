@@ -6,6 +6,25 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.9.0] - 2026-11-14
+
+### Améliorations
+
+- La suite de la journée devient un ruban de 24 cases horaires, de la même facture que la
+  frise des 2 heures, lisible sans infobulle : case colorée = pluie prévue (couleur =
+  intensité maximale de l'heure, comme sur la frise), case hachurée de cette couleur = pluie
+  prévue mais incertaine (risque sous 70 %), case hachurée de bleu = averse possible (risque
+  d'au moins 40 %) avec une étiquette "averses possibles (40 %)", case grise = heure sèche ; trait et repère "demain" à minuit, repères toutes les
+  3 heures, ruban réduit à un filet les jours secs. Une heure sous le seuil de pluie du
+  verdict n'est jamais colorée (plus de petites barres "traces" sous une phrase "pas de
+  pluie"). La phrase de synthèse gagne deux cas : "Averses possibles entre 21h et 3h, sans
+  cumul notable." et, quand le graphique est sec, la prochaine pluie connue au-delà ("Pas de
+  pluie prévue d'ici demain 18h, prochaine pluie vers demain 20h."), cohérente avec le "Sec
+  jusqu'à" du verdict. Le nombre et son unité ne se séparent plus en fin de ligne.
+- Les réglages s'ouvrent juste sous l'en-tête, au-dessus du verdict, sous le bouton qu'on vient
+  de toucher.
+- "Comment ça marche" est replié par défaut.
+
 ## [1.8.0] - 2026-11-14
 
 ### Améliorations

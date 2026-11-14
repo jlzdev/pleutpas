@@ -38,19 +38,22 @@ const updatedText = computed(() => fetchedAt.value === null
     </template>
   </header>
   <main class="mx-auto flex max-w-[640px] flex-col gap-3.5 px-3.5 pb-6 pt-2.5 desk:max-w-[860px]">
+    <SettingsCard v-if="place" v-show="settingsOpen" :place="place" @close="settingsOpen = false" />
     <InstallBanner />
     <template v-if="place">
       <VerdictCard :place="place" />
-      <SettingsCard v-show="settingsOpen" :place="place" @close="settingsOpen = false" />
       <TimelineCard />
       <RadarCard :place="place" />
       <DayCard />
       <div class="text-center text-xs" :class="updatedStale ? 'text-amber-500' : 'text-dim'">{{ updatedText }}</div>
     </template>
     <WelcomeCard v-else />
-    <section class="card text-sm text-dim">
-      <h2 class="hdr">Comment ça marche</h2>
-      <p>Pleut pas ? répond à une question simple : partir à vélo maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>
+    <details class="group card text-sm text-dim">
+      <summary class="hdr !mb-0 flex cursor-pointer select-none list-none items-center justify-between [&::-webkit-details-marker]:hidden">
+        Comment ça marche
+        <svg class="h-4 w-4 flex-none transition-transform group-open:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
+      </summary>
+      <p class="mt-2.5">Pleut pas ? répond à une question simple : partir à vélo maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>
       <ul class="mt-2 list-disc pl-5">
         <li>La pluie de la dernière heure au radar, puis la prévision minute par minute (Météo-France pluie dans l'heure, PIAF et AROME), puis la prévision Météo-France heure par heure (Open-Meteo hors de France).</li>
         <li>Neige et verglas, à titre d'information : vigilance Météo-France du département, et neige ou risque de verglas annoncés par Météo-France pour les deux prochaines heures.</li>
@@ -58,7 +61,7 @@ const updatedText = computed(() => fetchedAt.value === null
         <li>Avec une arrivée dans les réglages, la pluie est lue tout le long du trajet, en ligne droite, à l'heure où tu passes à chaque endroit (précision d'environ 2 km).</li>
         <li>France métropolitaine et pays voisins, choix de la ville ou géolocalisation, installable comme une application sur le téléphone.</li>
       </ul>
-    </section>
+    </details>
   </main>
   <footer class="mx-auto flex max-w-[640px] flex-wrap justify-center gap-x-3 gap-y-1 px-3.5 pb-7 text-[11px] leading-4 text-dim desk:max-w-[860px]">
     <span><a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener" title="Pluie dans l'heure, prévision, vigilance, PIAF et AROME-PI">Météo-France</a>

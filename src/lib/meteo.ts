@@ -606,7 +606,7 @@ export function intensityWord(mm15: number): string {
 }
 
 export function fmtMm(v: number): string {
-  return (v >= 10 ? Math.round(v).toString() : v.toFixed(1)).replace('.', ',') + ' mm'
+  return (v >= 10 ? Math.round(v).toString() : v.toFixed(1)).replace('.', ',') + '\u00a0mm'
 }
 
 function cellTitle(t: number, mm15: number): string {
@@ -665,8 +665,19 @@ export function timelineCells(trip: Trip, nowMs: number, tripMin: number): Timel
 export interface DayCell {
   start: number
   mm: number
+  maxMm15: number
   wetAt: number | null
   pct: number
+  probaStart: number
+}
+
+export function nextWetSlotMs(rain: Slot[], fromMs: number, untilMs: number): number {
+  for (const s of rain) {
+    if (s.end <= fromMs) continue
+    if (s.start >= untilMs) break
+    if (s.mm >= WET_MM) return Math.max(s.start, fromMs)
+  }
+  return -1
 }
 
 // prend le relais de la timeline 2 h : cumuls horaires recalcules depuis les memes slots
@@ -679,6 +690,7 @@ export function dayCells(fc: PointForecast | null, nowMs: number): DayCell[] {
     const h0 = firstHourMs + i * HOUR_MS
     const h1 = h0 + HOUR_MS
     let mm = 0
+    let maxMm15 = 0
     let covered = 0
     let wetAt: number | null = null
     for (const s of fc.rain) {
@@ -686,10 +698,12 @@ export function dayCells(fc: PointForecast | null, nowMs: number): DayCell[] {
       const overlapMin = (Math.min(s.end, h1) - Math.max(s.start, h0)) / 60000
       covered += overlapMin
       mm += s.mm * overlapMin / INTENSITY_MIN
+      maxMm15 = Math.max(maxMm15, s.mm)
       if (wetAt === null && s.mm >= WET_MM) wetAt = Math.max(s.start, h0)
     }
     if (covered < 60) break
-    cells.push({ start: h0, mm, wetAt, pct: spanAt(fc.proba, h0)?.pct ?? 0 })
+    const proba = spanAt(fc.proba, h0)
+    cells.push({ start: h0, mm, maxMm15, wetAt, pct: proba?.pct ?? 0, probaStart: proba?.start ?? h0 })
   }
   return cells
 }

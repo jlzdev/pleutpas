@@ -1,56 +1,127 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref } from 'vue'
 import { dest, forecast, nowTick } from '../store'
-import { clockParts, dayCells, fmtDay, fmtDayHM, fmtHM, fmtMm, intensityColor } from '../lib/meteo'
+import { clockParts, dayCells, fmtDay, fmtDayHM, fmtHM, fmtMm, HOUR_MS, intensityColor, nextWetSlotMs } from '../lib/meteo'
 
-interface HourBar {
-  label: string
-  bold: boolean
-  demain: boolean
-  proba: number
-  color: string | null
-  height: string
-  title: string
+type CellKind = 'sure' | 'incertain' | 'averse' | 'sec'
+
+interface RibbonCell {
+  kind: CellKind
+  style: Record<string, string>
 }
 
-const day = computed(() => dayCells(forecast.value, nowTick.value))
-// la probabilite Meteo-France est par tranche de 3 h et par paliers de 10 %, souvent a 100 % sous
-// la pluie : plafonnee a 60 % de la hauteur pour ne pas masquer le relief des cumuls
-const PROBA_MAX_HEIGHT = 60
-const probaNote = computed(() => (forecast.value?.source === 'mf' ? ' (Météo-France, par tranche de 3 h)' : forecast.value ? ' (Open-Meteo, par heure)' : ''))
+interface Run {
+  start: number
+  end: number
+  pct: number
+}
 
-const bars = computed<HourBar[]>(() => {
+const SURE_PCT = 70
+const SHOWER_PCT = 40
+const DRY_CELL = 'var(--color-line)'
+const GREY = '#8fa1b8'
+const HATCH_MIX = 25
+const deskQuery = window.matchMedia('(min-width: 900px)')
+const desk = ref(deskQuery.matches)
+const onDesk = (e: MediaQueryListEvent) => { desk.value = e.matches }
+deskQuery.addEventListener('change', onDesk)
+onBeforeUnmount(() => deskQuery.removeEventListener('change', onDesk))
+
+const day = computed(() => dayCells(forecast.value, nowTick.value))
+const leftOf = (i: number) => (i / 24) * 100 + '%'
+const hatch = (color: string) => 'repeating-linear-gradient(135deg, color-mix(in srgb, ' + color + ' ' + HATCH_MIX + '%, ' + DRY_CELL + ') 0 2px, transparent 2px 5px)'
+
+const cells = computed<RibbonCell[]>(() => {
   const cs = day.value
-  const wetIdx = cs.findIndex(c => c.wetAt !== null)
-  return cs.map((c, i) => {
-    const hh = clockParts(c.start).h
-    const demain = hh === 0
-    const proba = c.pct
-    const bold = i === wetIdx
-    let label = ''
-    if (bold) label = fmtHM(c.wetAt!)
-    else if (wetIdx >= 0 && Math.abs(i - wetIdx) <= (demain ? 2 : 1)) label = ''
-    else if (demain) label = fmtDay(c.start, nowTick.value)
-    else if (i % 3 === 0) label = hh + 'h'
-    return {
-      label,
-      bold,
-      demain,
-      proba,
-      color: intensityColor(c.mm / 4),
-      height: Math.min(100, 10 + (c.mm / 6) * 90) + '%',
-      title: fmtHM(c.start) + ' à ' + fmtHM(c.start + 3600000) + ' : '
-        + (c.wetAt !== null ? fmtMm(c.mm) + ' de pluie' : 'pas de pluie') + ', probabilité ' + proba + ' %',
+  const wetTranches = new Set(cs.filter(c => c.wetAt !== null).map(c => c.probaStart))
+  return cs.map((c): RibbonCell => {
+    if (c.wetAt !== null) {
+      const color = intensityColor(c.maxMm15) ?? GREY
+      return c.pct >= SURE_PCT
+        ? { kind: 'sure', style: { background: color } }
+        : { kind: 'incertain', style: { backgroundColor: DRY_CELL, backgroundImage: hatch(color) } }
+    }
+    if (c.pct >= SHOWER_PCT && !wetTranches.has(c.probaStart)) {
+      return { kind: 'averse', style: { backgroundColor: DRY_CELL, backgroundImage: hatch('var(--color-legere)') } }
+    }
+    return { kind: 'sec', style: { backgroundColor: DRY_CELL } }
+  })
+})
+
+const showerRuns = computed<Run[]>(() => {
+  const out: Run[] = []
+  cells.value.forEach((cell, i) => {
+    const last = out[out.length - 1]
+    if (cell.kind !== 'averse') return
+    if (last && last.end === i) {
+      last.end = i + 1
+      last.pct = Math.max(last.pct, day.value[i].pct)
+    } else {
+      out.push({ start: i, end: i + 1, pct: day.value[i].pct })
     }
   })
+  return out
+})
+
+const labels = computed(() => {
+  const minGap = desk.value ? 5 : 12
+  const out: { text: string; style: Record<string, string> }[] = []
+  let lastStart = -Infinity
+  for (const r of showerRuns.value) {
+    if (r.start < lastStart + minGap) continue
+    lastStart = r.start
+    out.push({
+      text: 'averses possibles (' + r.pct + '\u00a0%)',
+      style: r.start > 13 ? { right: (100 - (r.end / 24) * 100) + '%' } : { left: leftOf(r.start) },
+    })
+  }
+  return out
+})
+
+const dry = computed(() => cells.value.every(c => c.kind === 'sec'))
+const midnightIdx = computed(() => day.value.findIndex(c => clockParts(c.start).h === 0))
+
+const markers = computed(() => {
+  const cs = day.value
+  const minAfterFirst = desk.value ? 2 : 3
+  const out: { i: number; label: string; bold: boolean; midnight: boolean }[] = []
+  cs.forEach((c, i) => {
+    const h = clockParts(c.start).h
+    const midnight = h === 0
+    if (i === 0) {
+      out.push({ i, label: midnight ? 'demain' : h + 'h', bold: true, midnight })
+      return
+    }
+    if (h % 3 !== 0 || i < minAfterFirst) return
+    if (midnight) {
+      const prev = out[out.length - 1]
+      if (prev && !prev.bold && i - prev.i < 3) out.pop()
+      out.push({ i, label: 'demain', bold: true, midnight: true })
+      return
+    }
+    const prev = out[out.length - 1]
+    if (!desk.value && prev?.midnight && i - prev.i <= 3) return
+    out.push({ i, label: h + 'h', bold: false, midnight: false })
+  })
+  return out
 })
 
 const note = computed(() => {
   const cs = day.value
   if (!cs.length) return 'Pas de données pour le moment.'
-  const endMs = cs[cs.length - 1].start + 3600000
+  const endMs = cs[cs.length - 1].start + HOUR_MS
   const wetIdx = cs.findIndex(c => c.wetAt !== null)
-  if (wetIdx < 0) return 'Pas de pluie prévue d\'ici ' + fmtDayHM(endMs, nowTick.value) + '.'
+  if (wetIdx < 0) {
+    const run = showerRuns.value[0]
+    if (run) {
+      if (run.start === 0 && run.end === cs.length) return 'Averses possibles sur toute la période, sans cumul notable.'
+      const endRun = run.end < cs.length ? cs[run.end].start : endMs
+      return 'Averses possibles entre ' + fmtDayHM(cs[run.start].start, nowTick.value) + ' et ' + fmtDayHM(endRun, nowTick.value) + ', sans cumul notable.'
+    }
+    const next = forecast.value ? nextWetSlotMs(forecast.value.rain, endMs, nowTick.value + 48 * HOUR_MS) : -1
+    return 'Pas de pluie prévue d\'ici ' + fmtDayHM(endMs, nowTick.value)
+      + (next >= 0 ? ', prochaine pluie vers ' + fmtDayHM(next, nowTick.value) + '.' : '.')
+  }
   const total = cs.reduce((a, c) => a + c.mm, 0)
   const mmTxt = fmtMm(total)
   if (wetIdx === 0) {
@@ -67,28 +138,29 @@ const note = computed(() => {
 <template>
   <section class="card">
     <h2 class="hdr">La suite de la journée{{ dest ? ' au départ' : '' }}</h2>
-    <template v-if="bars.length">
-      <div class="mb-1 text-[11px] text-dim">Chaque barre = 1 h, après les 2 heures ci-dessus. Fond bleu pâle = probabilité de pluie{{ probaNote }}</div>
-      <div class="flex h-[110px] items-end gap-[3px] desk:h-[140px]">
-        <div
-          v-for="(c, i) in bars" :key="i" :title="c.title"
-          class="relative h-full flex-1 rounded-[3px] bg-[linear-gradient(to_top,var(--color-line)_0,var(--color-line)_2px,transparent_2px)]"
-        >
-          <div class="absolute inset-x-0 bottom-0 rounded-t-[3px] bg-legere opacity-[.22]" :style="{ height: Math.round(c.proba * PROBA_MAX_HEIGHT / 100) + '%' }"></div>
-          <div
-            v-if="c.color" class="absolute bottom-0 left-[15%] right-[15%] rounded-t-[3px]"
-            :style="{ background: c.color, height: c.height }"
-          ></div>
-        </div>
+    <template v-if="cells.length">
+      <div v-if="labels.length" class="relative h-5">
+        <span v-for="l in labels" :key="l.text + l.style.left + l.style.right" class="absolute bottom-1 whitespace-nowrap text-[12px] leading-[14px] text-dim" :style="l.style">{{ l.text }}</span>
       </div>
-      <div class="mt-1.5 flex gap-[3px]">
-        <div
-          v-for="(c, i) in bars" :key="i"
-          class="flex-1 whitespace-nowrap text-center text-[9px] desk:text-[11px]"
-          :class="c.bold ? 'font-bold text-ink' : (c.demain ? 'text-bruine' : 'text-dim')"
-        >{{ c.label }}</div>
+      <div
+        class="flex gap-px overflow-hidden rounded-md" :class="dry ? 'h-2' : 'h-7 desk:h-9'"
+        role="img" :aria-label="note"
+      >
+        <div v-for="(c, i) in cells" :key="i" class="flex-1" :style="c.style"></div>
+      </div>
+      <div class="relative mt-1 h-4">
+        <span
+          v-if="midnightIdx > 0" class="absolute bottom-0 w-[2px] bg-dim" :class="dry ? '-top-[15px]' : '-top-[35px] desk:-top-[43px]'"
+          :style="{ left: 'calc(' + leftOf(midnightIdx) + ' - 1px)' }"
+        ></span>
+        <span
+          v-for="m in markers" :key="m.i"
+          class="absolute top-0.5 whitespace-nowrap text-[11px] leading-[14px]"
+          :class="[m.bold ? 'font-bold text-ink' : 'text-dim', m.midnight && m.i > 0 ? 'pl-1' : '']"
+          :style="{ left: leftOf(m.i) }"
+        >{{ m.label }}</span>
       </div>
     </template>
-    <div class="mt-2 text-[13px] desk:text-sm" :class="day.some(c => c.wetAt !== null) ? 'text-ink' : 'text-dim'">{{ note }}</div>
+    <div class="mt-2.5 text-[15px] leading-5 text-ink [text-wrap:pretty]">{{ note }}</div>
   </section>
 </template>
