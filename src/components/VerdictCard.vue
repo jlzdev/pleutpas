@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { dest, fetchedAt, forecastMF, forecastMFDest, frameSamples, nowTick, place, radarPending, refreshing, trip, tripMin, vigilance, weather } from '../store'
+import { dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, place, radarPending, refreshing, trip, tripMin, vigilance } from '../store'
 import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, fmtVigilance, routeLabel, winterNote, type InfoText, type VerdictView } from '../lib/meteo'
 
 const verdict = computed<VerdictView>(() => {
-  if (!weather.value) {
+  if (!forecast.value) {
     return refreshing.value
       ? { state: 'inconnu', big: '...', sub: 'Chargement', detail: '' }
       : { state: 'inconnu', big: '?', sub: 'Météo injoignable', detail: 'Vérifie ta connexion puis actualise.' }
@@ -16,8 +16,8 @@ const verdict = computed<VerdictView>(() => {
 })
 
 const conditions = computed(() => {
-  if (!weather.value || verdict.value.state === 'inconnu') return null
-  const c = conditionsAt(weather.value.minutely_15, nowTick.value)
+  if (!forecast.value || verdict.value.state === 'inconnu') return null
+  const c = conditionsAt(forecast.value.conditions, nowTick.value)
   if (!c) return null
   const d = dest.value
   return fmtConditions(c, d ? bearingDeg(place.value, d) : null)
@@ -25,7 +25,7 @@ const conditions = computed(() => {
 
 // neige, verglas et vigilance : des informations comme la temperature, jamais un verdict
 const notes = computed<InfoText[]>(() => {
-  if (!weather.value || verdict.value.state === 'inconnu') return []
+  if (!forecast.value || verdict.value.state === 'inconnu') return []
   const out: InfoText[] = []
   const winter = winterNote(forecastMF.value, forecastMFDest.value, dest.value !== null, nowTick.value)
   if (winter) out.push(winter)

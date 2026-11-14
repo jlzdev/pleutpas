@@ -5,7 +5,9 @@ import {
   clockParts,
   displayZone,
   estimatedTripMin,
+  hourlyEndMs,
   inFranceBounds,
+  isMfPointUsable,
   MAX_TRIP_MIN,
   MIN_TRIP_MIN,
   TOMORROW_FROM_HOUR,
@@ -14,6 +16,7 @@ import {
   type MfEntry,
   type MfForecast,
   type Place,
+  type PointForecast,
   type Slot,
   type Trip,
   type Vigilance,
@@ -30,7 +33,6 @@ import {
   loadFrameImage,
   sampleFramePoints,
   type FutureRain,
-  type OpenMeteoPayload,
 } from './lib/api'
 
 const KEY_TRIP = 'pleutpas.tripMin'
@@ -104,8 +106,8 @@ export const dest = ref<Place | null>(initialDest)
 export const basemap = ref<Basemap>(lsGet(KEY_BASEMAP) === 'velo' ? 'velo' : 'plan')
 export const tripMin = ref(loadTrip())
 export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? lsGet(KEY_REMINDER) as string : '08:00')
-export const weather = ref<OpenMeteoPayload | null>(null)
-export const weatherDest = ref<OpenMeteoPayload | null>(null)
+export const forecast = ref<PointForecast | null>(null)
+export const forecastDest = ref<PointForecast | null>(null)
 export const fetchedAt = ref<number | null>(null)
 export const rainMF = ref<MfEntry[] | null>(null)
 export const rainMFDest = ref<MfEntry[] | null>(null)
@@ -119,21 +121,8 @@ export const refreshing = ref(false)
 export const nowTick = ref(Date.now())
 export const recenterTick = ref(0)
 
-function toSlots(payload: OpenMeteoPayload | null): Slot[] {
-  if (!payload) return []
-  const t = payload.minutely_15.time
-  const p = payload.minutely_15.precipitation
-  const out: Slot[] = []
-  for (let i = 0; i < t.length; i++) {
-    const mm = p[i]
-    if (mm === null || mm === undefined) break
-    out.push({ start: t[i] * 1000, mm })
-  }
-  return out
-}
-
-export const slots = computed<Slot[]>(() => toSlots(weather.value))
-export const slotsDest = computed<Slot[]>(() => toSlots(weatherDest.value))
+export const slots = computed<Slot[]>(() => forecast.value?.rain ?? [])
+export const slotsDest = computed<Slot[]>(() => forecastDest.value?.rain ?? [])
 
 export const trip = computed<Trip>(() => {
   const hasDest = dest.value !== null
@@ -203,39 +192,52 @@ export async function refresh(fromButton = false): Promise<void> {
   radarPending.value = true
   if (fromButton) recenterTick.value++
   const futP = fetchFutureRain().catch(() => null)
-  const [w, r, rd, f, fd] = await Promise.allSettled([
-    fetchWeather(places),
+  const now = Date.now()
+  const [r, rd, f, fd] = await Promise.allSettled([
     fetchRain(p),
     d ? fetchRain(d) : Promise.resolve(null),
-    fetchForecastMF(p),
-    d ? fetchForecastMF(d) : Promise.resolve(null),
+    fetchForecastMF(p, now),
+    d ? fetchForecastMF(d, now) : Promise.resolve(null),
   ])
   if (seq !== refreshSeq) return
+  const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
+  const rain = settled(r)
+  const rainDest = settled(rd)
+  const fc = settled(f)
+  const fcDest = settled(fd)
+  // Meteo-France des que le lieu est en France et couvert au pas horaire, sinon Open-Meteo
+  // (hors de France, ou en secours silencieux si l'endpoint MF ne repond pas)
+  const points: (PointForecast | null)[] = [fc, fcDest].slice(0, places.length)
+    .map((m) => (m && isMfPointUsable(m, now) ? m.point : null))
+  const needOm = places.filter((_, i) => !points[i])
+  if (needOm.length) {
+    const om = await fetchWeather(needOm, now).catch(() => null)
+    if (seq !== refreshSeq) return
+    if (om) {
+      let k = 0
+      points.forEach((pt, i) => { if (!pt) points[i] = om[k++] ?? null })
+    }
+  }
   const key = cacheKey(p, d)
-  if (w.status === 'fulfilled') {
-    displayZone.value = w.value[0].timezone
-    weather.value = w.value[0]
-    weatherDest.value = w.value[1] ?? null
+  if (points[0]) {
+    displayZone.value = points[0].timezone ?? undefined
+    forecast.value = points[0]
+    forecastDest.value = points[1] ?? null
     fetchedAt.value = Date.now()
-    lsSet(KEY_CACHE, JSON.stringify({ at: fetchedAt.value, key, payloads: w.value }))
-  } else if (!weather.value) {
+    lsSet(KEY_CACHE, JSON.stringify({ v: 2, at: fetchedAt.value, key, forecasts: points }))
+  } else if (!forecast.value) {
     try {
       const c = JSON.parse(lsGet(KEY_CACHE) ?? 'null')
-      if (c && c.payloads && c.key === key) {
-        displayZone.value = c.payloads[0].timezone
-        weather.value = c.payloads[0]
-        weatherDest.value = c.payloads[1] ?? null
+      if (c && c.v === 2 && Array.isArray(c.forecasts) && c.key === key && c.forecasts[0]) {
+        displayZone.value = c.forecasts[0].timezone ?? undefined
+        forecast.value = c.forecasts[0]
+        forecastDest.value = c.forecasts[1] ?? null
         fetchedAt.value = c.at
       }
     } catch { /* entree corrompue */ }
   }
-  const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
-  const rain = settled(r)
-  const rainDest = settled(rd)
   rainMF.value = rain?.entries ?? null
   rainMFDest.value = rainDest?.entries ?? null
-  const fc = settled(f)
-  const fcDest = settled(fd)
   forecastMF.value = fc
   forecastMFDest.value = fcDest
   void fetchVigilance(
@@ -256,8 +258,8 @@ export async function refresh(fromButton = false): Promise<void> {
 }
 
 function resetData(): void {
-  weather.value = null
-  weatherDest.value = null
+  forecast.value = null
+  forecastDest.value = null
   fetchedAt.value = null
   frameSamples.value = null
   forecastMF.value = null
@@ -328,7 +330,7 @@ declare global {
   interface Window { __pp: Record<string, unknown> }
 }
 window.__pp = {
-  place, dest, tripMin, weather, weatherDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
+  place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
   frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone,
-  refresh, setPlace, setDest, swapPlaces, fetchWarning,
+  refresh, setPlace, setDest, swapPlaces, fetchWarning, isMfPointUsable, hourlyEndMs,
 }

@@ -9,7 +9,32 @@ export interface Place {
 
 export interface Slot {
   start: number
+  end: number
   mm: number
+}
+
+export interface ConditionSpan {
+  start: number
+  end: number
+  tempC: number
+  feelsC: number
+  windKmh: number
+  gustKmh: number
+  windFrom: number | null
+}
+
+export interface ProbaSpan {
+  start: number
+  end: number
+  pct: number
+}
+
+export interface PointForecast {
+  source: 'mf' | 'open-meteo'
+  timezone: string | null
+  rain: Slot[]
+  conditions: ConditionSpan[]
+  proba: ProbaSpan[]
 }
 
 export interface MfEntry {
@@ -32,8 +57,10 @@ export interface MfHazard {
 
 export interface MfForecast {
   dept: string | null
+  country: string | null
   hours: MfHour[]
   hazards: MfHazard[]
+  point: PointForecast
 }
 
 export interface Vigilance {
@@ -60,20 +87,11 @@ export interface VerdictView {
   detail: string
 }
 
-export interface ConditionSeries {
-  time: number[]
-  temperature_2m?: (number | null)[]
-  apparent_temperature?: (number | null)[]
-  wind_speed_10m?: (number | null)[]
-  wind_direction_10m?: (number | null)[]
-  wind_gusts_10m?: (number | null)[]
-}
-
 export interface Conditions {
   tempC: number
   feelsC: number
   windKmh: number
-  windFrom: number
+  windFrom: number | null
   gustKmh: number
 }
 
@@ -132,7 +150,8 @@ export function bearingDeg(a: Place, b: Place): number {
   return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360
 }
 
-export const SLOT_MIN = palette.slotMin
+// unite d'intensite de toute l'app : mm par pas de 15 min (seuils, palette, images)
+export const INTENSITY_MIN = palette.slotMin
 export const WET_MM = palette.wetMm
 export const LIGHT_MAX_MM = palette.lightMaxMm
 export const BESANCON: Place = { name: 'Besançon', lat: 47.238, lon: 6.024 }
@@ -245,11 +264,16 @@ function fmtDayHM(tMs: number, nowMs: number): string {
   return d ? d + ' ' + fmtHM(tMs) : fmtHM(tMs)
 }
 
-export function slotIndexNow(slots: Slot[], nowMs: number): number {
-  for (let i = 0; i < slots.length; i++) {
-    if (slots[i].start + SLOT_MIN * 60000 > nowMs) return i
+export function spanAt<T extends { start: number; end: number }>(list: T[], tMs: number): T | null {
+  let lo = 0
+  let hi = list.length - 1
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1
+    if (list[mid].start <= tMs) lo = mid
+    else hi = mid - 1
   }
-  return -1
+  const s = list[lo]
+  return s && s.start <= tMs && tMs < s.end ? s : null
 }
 
 const FEELS_DIFF_C = 2
@@ -259,20 +283,10 @@ const GUST_RATIO = 1.5
 const STRONG_GUST_KMH = 50
 const WIND_FROM = ['du nord', 'de nord-est', "d'est", 'de sud-est', 'du sud', 'de sud-ouest', "d'ouest", 'de nord-ouest']
 
-export function conditionsAt(series: ConditionSeries, nowMs: number): Conditions | null {
-  const t = series.time
-  let i = -1
-  for (let k = 0; k < t.length; k++) {
-    if (t[k] * 1000 + SLOT_MIN * 60000 > nowMs) { i = k; break }
-  }
-  if (i < 0) return null
-  const tempC = series.temperature_2m?.[i]
-  const feelsC = series.apparent_temperature?.[i]
-  const windKmh = series.wind_speed_10m?.[i]
-  const windFrom = series.wind_direction_10m?.[i]
-  const gustKmh = series.wind_gusts_10m?.[i]
-  if (tempC == null || feelsC == null || windKmh == null || windFrom == null || gustKmh == null) return null
-  return { tempC, feelsC, windKmh, windFrom, gustKmh }
+export function conditionsAt(conditions: ConditionSpan[], nowMs: number): Conditions | null {
+  const c = spanAt(conditions, nowMs)
+  if (!c) return null
+  return { tempC: c.tempC, feelsC: c.feelsC, windKmh: c.windKmh, windFrom: c.windFrom, gustKmh: c.gustKmh }
 }
 
 export function windWord(deg: number): string {
@@ -303,8 +317,9 @@ export function fmtConditions(c: Conditions, headingDeg: number | null = null): 
   const strong = c.gustKmh >= STRONG_GUST_KMH
   const gusts = c.gustKmh >= GUST_MIN_KMH && c.gustKmh >= GUST_RATIO * c.windKmh ? ', rafales ' + gust : ''
   if (wind < CALM_KMH && !gusts) return { temp, wind: 'Vent calme.', strong: false }
-  const head = strong ? 'Vent fort ' : 'Vent '
-  const from = headingDeg === null ? windWord(c.windFrom) : relativeWindWord(c.windFrom, headingDeg)
+  const head = strong ? 'Vent fort' : 'Vent'
+  const from = c.windFrom === null ? ''
+    : ' ' + (headingDeg === null ? windWord(c.windFrom) : relativeWindWord(c.windFrom, headingDeg))
   return { temp, wind: head + from + ' ' + Math.max(wind, CALM_KMH) + ' km/h' + gusts + '.', strong }
 }
 
@@ -371,22 +386,35 @@ export function fmtVigilance(v: Vigilance | null): InfoText | null {
   return null
 }
 
+export const MF_MIN_HOURLY_H = 12
+
+// fin de la zone au pas horaire (ou plus fin) qui couvre maintenant sans trou
+export function hourlyEndMs(rain: Slot[], nowMs: number): number {
+  const first = spanAt(rain, nowMs)
+  if (!first) return 0
+  let end = first.end
+  for (let i = rain.indexOf(first) + 1; i < rain.length; i++) {
+    const s = rain[i]
+    if (s.start !== end || s.end - s.start > HOUR_MS) break
+    end = s.end
+  }
+  return end
+}
+
+export function isMfPointUsable(fc: MfForecast, nowMs: number): boolean {
+  return !!fc.country && fc.country.startsWith('FR') && hourlyEndMs(fc.point.rain, nowMs) >= nowMs + MF_MIN_HOURLY_H * HOUR_MS
+}
+
 function slotsEndMs(slots: Slot[]): number {
-  return slots.length ? slots[slots.length - 1].start + SLOT_MIN * 60000 : 0
+  return slots.length ? slots[slots.length - 1].end : 0
 }
 
 function mfEntryAt(mf: MfEntry[] | null, tMs: number): MfEntry | null {
-  if (!mf) return null
-  for (const e of mf) {
-    if (tMs >= e.start && tMs < e.end) return e
-  }
-  return null
+  return mf ? spanAt(mf, tMs) : null
 }
 
 function slotAt(slots: Slot[], tMs: number): Slot | null {
-  if (!slots.length) return null
-  const i = Math.floor((tMs - slots[0].start) / (SLOT_MIN * 60000))
-  return i >= 0 && i < slots.length ? slots[i] : null
+  return spanAt(slots, tMs)
 }
 
 // niveaux MF pluie dans l'heure (1 sec, 2 faible, 3 moderee, 4 forte) ramenes a l'echelle
@@ -608,28 +636,31 @@ export interface DayCell {
   start: number
   mm: number
   wetAt: number | null
+  pct: number
 }
 
-// prend le relais de la timeline 2 h : cumuls horaires recalcules depuis la meme serie
-// minutely_15 que lit le verdict au-dela de l'heure MF, coherence par construction
-export function dayCells(slots: Slot[], nowMs: number): DayCell[] {
-  const bandEndMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + 24 * STEP_5MIN_MS
-  const firstHourMs = Math.floor(bandEndMs / 3600000) * 3600000
+// prend le relais de la timeline 2 h : cumuls horaires recalcules depuis les memes slots
+// que lit le verdict au-dela de l'heure MF, coherence par construction
+export function dayCells(fc: PointForecast | null, nowMs: number): DayCell[] {
+  if (!fc) return []
+  const bandEndMs = Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + TIMELINE_MS
+  const firstHourMs = Math.floor(bandEndMs / HOUR_MS) * HOUR_MS
   const cells: DayCell[] = []
   for (let i = 0; i < 24; i++) {
-    const h0 = firstHourMs + i * 3600000
+    const h0 = firstHourMs + i * HOUR_MS
+    const h1 = h0 + HOUR_MS
     let mm = 0
+    let covered = 0
     let wetAt: number | null = null
-    let filled = 0
-    for (let t = h0; t < h0 + 3600000; t += SLOT_MIN * 60000) {
-      const s = slotAt(slots, t)
-      if (!s) break
-      filled++
-      mm += s.mm
-      if (wetAt === null && s.mm >= WET_MM) wetAt = s.start
+    for (const s of fc.rain) {
+      if (s.end <= h0 || s.start >= h1) continue
+      const overlapMin = (Math.min(s.end, h1) - Math.max(s.start, h0)) / 60000
+      covered += overlapMin
+      mm += s.mm * overlapMin / INTENSITY_MIN
+      if (wetAt === null && s.mm >= WET_MM) wetAt = Math.max(s.start, h0)
     }
-    if (filled < 4) break
-    cells.push({ start: h0, mm, wetAt })
+    if (covered < 60) break
+    cells.push({ start: h0, mm, wetAt, pct: spanAt(fc.proba, h0)?.pct ?? 0 })
   }
   return cells
 }
@@ -641,8 +672,7 @@ export function computeVerdict(
   fetchedAtMs: number | null,
 ): VerdictView {
   const stale = fetchedAtMs !== null && nowMs - fetchedAtMs > STALE_MS
-  const idx = slotIndexNow(trip.slots[0], nowMs)
-  if (idx < 0 || stale) {
+  if (slotsEndMs(trip.slots[0]) <= nowMs || stale) {
     return {
       state: 'inconnu',
       big: '?',

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { dest, nowTick, slots, weather } from '../store'
+import { dest, forecast, nowTick } from '../store'
 import { clockParts, dayCells, fmtDay, fmtHM, intensityColor } from '../lib/meteo'
 
 interface HourBar {
@@ -13,7 +13,7 @@ interface HourBar {
   title: string
 }
 
-const day = computed(() => dayCells(slots.value, nowTick.value))
+const day = computed(() => dayCells(forecast.value, nowTick.value))
 
 function dayHM(tMs: number): string {
   const d = fmtDay(tMs, nowTick.value)
@@ -22,13 +22,11 @@ function dayHM(tMs: number): string {
 
 const bars = computed<HourBar[]>(() => {
   const cs = day.value
-  const h = weather.value?.hourly
   const wetIdx = cs.findIndex(c => c.wetAt !== null)
   return cs.map((c, i) => {
     const hh = clockParts(c.start).h
     const demain = hh === 0
-    const hi = h ? h.time.indexOf(c.start / 1000) : -1
-    const proba = hi >= 0 ? h!.precipitation_probability[hi] || 0 : 0
+    const proba = c.pct
     const bold = i === wetIdx
     let label = ''
     if (bold) label = fmtHM(c.wetAt!)

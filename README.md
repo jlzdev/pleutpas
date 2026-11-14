@@ -24,8 +24,12 @@ Trois familles de sources, par ordre d'autorité sur le verdict :
    modèle, nouveau run toutes les 5 min. Elle alimente la carte (1 h de passé et la
    prévision jusqu'à +3 h) et sert de repli au verdict quand la source 1 est muette.
    AROME-PI (pas de 15 min) prend le relais sur la carte au-delà, jusqu'à environ +6 h.
-3. Open-Meteo (minutely_15 et hourly) : au-delà de l'heure couverte par Météo-France,
-   et pour la suite de la journée. Fournit aussi température, ressenti et vent du moment.
+3. Prévision Météo-France (endpoint de l'application mobile, comme la pluie dans l'heure,
+   pas horaire sur environ 36 h puis 3 h) : au-delà de l'heure couverte par la source 1,
+   pour la suite de la journée, et pour la température, le ressenti, le vent et la
+   probabilité de pluie par tranche de 3 h. Open-Meteo (minutely_15 et hourly, pas de
+   15 min) reste la source hors de France et le repli silencieux si Météo-France ne répond
+   pas ; les composants lisent une prévision point unifiée sans connaître la source.
 
 À titre d'information, sans effet sur le verdict : la vigilance neige-verglas du département
 et la neige, la pluie verglaçante ou le risque de verglas des deux prochaines heures, lus sur

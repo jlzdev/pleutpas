@@ -1,7 +1,20 @@
 import palette from './palette.json'
-import { cleanName, FRANCE_BOUNDS, inFranceBounds, type MfEntry, type MfForecast, type Place, type Vigilance } from './meteo'
+import {
+  cleanName,
+  FRANCE_BOUNDS,
+  inFranceBounds,
+  INTENSITY_MIN,
+  type ConditionSpan,
+  type MfEntry,
+  type MfForecast,
+  type Place,
+  type PointForecast,
+  type ProbaSpan,
+  type Slot,
+  type Vigilance,
+} from './meteo'
 
-export interface OpenMeteoPayload {
+interface OpenMeteoPayload {
   timezone?: string
   minutely_15: {
     time: number[]
@@ -12,8 +25,11 @@ export interface OpenMeteoPayload {
     wind_direction_10m?: (number | null)[]
     wind_gusts_10m?: (number | null)[]
   }
-  hourly: { time: number[]; precipitation: number[]; precipitation_probability: number[] }
+  hourly: { time: number[]; precipitation_probability: (number | null)[] }
 }
+
+const HOUR_MS = 3600000
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 
 export interface FutureFrame {
   time: number
@@ -44,11 +60,42 @@ export interface GeoNear {
 // endpoint de l'app mobile Meteo-France, token public partage (non officiel, peut casser sans preavis)
 const MF_TOKEN = '__Wj7dVSTjV9YGu1guveLyDq0g7S7TfTjaHBTPTpO0kj8__'
 
-export async function fetchWeather(places: Place[]): Promise<OpenMeteoPayload[]> {
+function fromOpenMeteo(p: OpenMeteoPayload, nowMs: number): PointForecast {
+  const m = p.minutely_15
+  const rain: Slot[] = []
+  const conditions: ConditionSpan[] = []
+  for (let i = 0; i < m.time.length; i++) {
+    const start = m.time[i] * 1000
+    const end = start + INTENSITY_MIN * 60000
+    const mm = m.precipitation[i]
+    if (mm === null || mm === undefined) break
+    if (end <= nowMs) continue
+    rain.push({ start, end, mm })
+    const tempC = m.temperature_2m?.[i]
+    const feelsC = m.apparent_temperature?.[i]
+    const windKmh = m.wind_speed_10m?.[i]
+    const gustKmh = m.wind_gusts_10m?.[i]
+    if (tempC != null && feelsC != null && windKmh != null && gustKmh != null) {
+      conditions.push({ start, end, tempC, feelsC, windKmh, gustKmh, windFrom: m.wind_direction_10m?.[i] ?? null })
+    }
+  }
+  const proba: ProbaSpan[] = []
+  const h = p.hourly
+  for (let i = 0; i < h.time.length; i++) {
+    const start = h.time[i] * 1000
+    const pct = h.precipitation_probability[i]
+    if (start + HOUR_MS <= nowMs || pct === null || pct === undefined) continue
+    proba.push({ start, end: start + HOUR_MS, pct })
+  }
+  return { source: 'open-meteo', timezone: p.timezone ?? null, rain, conditions, proba }
+}
+
+// repli et hors de France : un seul appel pour tous les lieux demandes
+export async function fetchWeather(places: Place[], nowMs: number): Promise<PointForecast[]> {
   const url = 'https://api.open-meteo.com/v1/forecast'
     + '?latitude=' + places.map((p) => p.lat).join(',') + '&longitude=' + places.map((p) => p.lon).join(',')
     + '&minutely_15=precipitation,temperature_2m,apparent_temperature,wind_speed_10m,wind_direction_10m,wind_gusts_10m'
-    + '&hourly=precipitation,precipitation_probability'
+    + '&hourly=precipitation_probability'
     + '&forecast_days=2&timezone=auto&timeformat=unixtime'
   const res = await fetch(url)
   if (!res.ok) throw new Error('open-meteo http ' + res.status)
@@ -56,7 +103,7 @@ export async function fetchWeather(places: Place[]): Promise<OpenMeteoPayload[]>
   // Open-Meteo renvoie un objet pour un lieu et une liste au-dela
   const list: OpenMeteoPayload[] = Array.isArray(data) ? data : [data]
   if (list.length !== places.length) throw new Error('open-meteo : ' + list.length + ' lieux au lieu de ' + places.length)
-  return list
+  return list.map((p) => fromOpenMeteo(p, nowMs))
 }
 
 export interface RainResult {
@@ -90,28 +137,105 @@ export async function fetchRain(place: Place): Promise<RainResult> {
   return { entries, dept }
 }
 
-const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : 0)
+const num = (v: unknown) => (isNum(v) ? v : 0)
+const timeOf = (v: unknown) => Date.parse(typeof v === 'string' ? v : '')
 
-// prevision de l'app mobile Meteo-France (meme webservice et meme token que /rain), pas horaire :
-// seuls la neige, le libelle de temps et le risque de verglas en sont gardes
-export async function fetchForecastMF(place: Place): Promise<MfForecast | null> {
+type MfRecord = Record<string, unknown>
+const CUMUL_FIELDS: [rain: string, snow: string, durMin: number][] = [
+  ['rain_1h', 'snow_1h', 60], ['rain_3h', 'snow_3h', 180], ['rain_6h', 'snow_6h', 360],
+]
+
+// les cumuls MF portent sur la periode qui PRECEDE l'horodatage (deduit le 2026-11-14 : la
+// premiere valeur rain_3h tombe juste apres le passage du pas de 1 h au pas de 3 h)
+const cumulWindow = (tMs: number, durMin: number) => ({ start: tMs - durMin * 60000, end: tMs })
+
+function mfRain(entries: { f: MfRecord; t: number }[], nowMs: number): Slot[] {
+  const rain: Slot[] = []
+  for (const { f, t } of entries) {
+    const field = CUMUL_FIELDS.find(([r, s]) => isNum(f[r]) || isNum(f[s]))
+    if (!field) break
+    const [r, s, dur] = field
+    const { start, end } = cumulWindow(t, dur)
+    const prev = rain[rain.length - 1]
+    if (end <= nowMs || (prev && start < prev.end)) continue
+    rain.push({ start, end, mm: (num(f[r]) + num(f[s])) * INTENSITY_MIN / dur })
+  }
+  return rain
+}
+
+function mfConditions(entries: { f: MfRecord; t: number }[], nowMs: number): ConditionSpan[] {
+  const out: ConditionSpan[] = []
+  for (let i = 0; i < entries.length; i++) {
+    const { f, t } = entries[i]
+    const next = entries[i + 1]
+    const end = next ? next.t : t + (i > 0 ? t - entries[i - 1].t : HOUR_MS)
+    if (end <= nowMs || !isNum(f.T) || !isNum(f.wind_speed)) continue
+    const windKmh = f.wind_speed * 3.6
+    const gustKmh = num(f.wind_speed_gust) * 3.6
+    out.push({
+      start: t, end, tempC: f.T, feelsC: isNum(f.T_windchill) ? f.T_windchill : f.T,
+      windKmh, gustKmh: gustKmh > 0 ? gustKmh : windKmh,
+      windFrom: isNum(f.wind_direction) && f.wind_direction >= 0 ? f.wind_direction : null,
+    })
+  }
+  return out
+}
+
+function mfProba(list: MfRecord[], nowMs: number): ProbaSpan[] {
+  const out: ProbaSpan[] = []
+  let prevT = NaN
+  for (const h of list) {
+    const t = timeOf(h.time)
+    if (!Number.isFinite(t)) continue
+    const spacingMin = Number.isFinite(prevT) ? (t - prevT) / 60000 : 180
+    prevT = t
+    const pick: [number, number] | null = spacingMin >= 360 && isNum(h.rain_hazard_6h) ? [h.rain_hazard_6h, 360]
+      : isNum(h.rain_hazard_3h) ? [h.rain_hazard_3h, 180]
+      : isNum(h.rain_hazard_6h) ? [h.rain_hazard_6h, 360] : null
+    if (!pick) continue
+    const { start, end } = cumulWindow(t, pick[1])
+    const prev = out[out.length - 1]
+    if (end <= nowMs || (prev && start < prev.end)) continue
+    out.push({ start, end, pct: pick[0] })
+  }
+  return out
+}
+
+// prevision de l'app mobile Meteo-France (meme webservice et meme token que /rain) : pas horaire
+// sur ~36 h puis 3 h et 6 h en France, pas de 3 h seulement hors de France ; un seul appel nourrit
+// la prevision point (pluie, conditions, probabilite) et l'info hiver (neige, risque de verglas)
+export async function fetchForecastMF(place: Place, nowMs: number): Promise<MfForecast | null> {
   const res = await fetch('https://webservice.meteofrance.com/v2/forecast?lat=' + place.lat
     + '&lon=' + place.lon + '&lang=fr&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance forecast http ' + res.status)
   const data = await res.json()
-  const p = data.properties
+  const p = data.properties as MfRecord | undefined
   if (!p || !Array.isArray(p.forecast)) return null
-  const hours = (p.forecast as { time?: unknown; snow_1h?: unknown; weather_description?: unknown }[])
-    .map((f) => ({
-      start: Date.parse(typeof f.time === 'string' ? f.time : ''),
-      snowCm: num(f.snow_1h),
-      desc: typeof f.weather_description === 'string' ? f.weather_description : '',
-    }))
+  const entries = (p.forecast as MfRecord[])
+    .map((f) => ({ f, t: timeOf(f.time) }))
+    .filter((e) => Number.isFinite(e.t))
+  const probaList = Array.isArray(p.probability_forecast) ? (p.probability_forecast as MfRecord[]) : []
+  const hours = entries.map(({ f, t }) => ({
+    start: t,
+    snowCm: num(f.snow_1h),
+    desc: typeof f.weather_description === 'string' ? f.weather_description : '',
+  }))
+  const hazards = probaList
+    .map((h) => ({ start: timeOf(h.time), freezingPct: num(h.freezing_hazard) }))
     .filter((h) => Number.isFinite(h.start))
-  const hazards = ((Array.isArray(p.probability_forecast) ? p.probability_forecast : []) as { time?: unknown; freezing_hazard?: unknown }[])
-    .map((h) => ({ start: Date.parse(typeof h.time === 'string' ? h.time : ''), freezingPct: num(h.freezing_hazard) }))
-    .filter((h) => Number.isFinite(h.start))
-  return { dept: deptOf(p.french_department), hours, hazards }
+  return {
+    dept: deptOf(p.french_department),
+    country: typeof p.country === 'string' ? p.country : null,
+    hours,
+    hazards,
+    point: {
+      source: 'mf',
+      timezone: typeof p.timezone === 'string' ? p.timezone : null,
+      rain: mfRain(entries, nowMs),
+      conditions: mfConditions(entries, nowMs),
+      proba: mfProba(probaList, nowMs),
+    },
+  }
 }
 
 // vigilance departementale de l'app mobile (meme webservice), couleur 1 vert a 4 rouge du

@@ -6,6 +6,29 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.7.0] - 2026-11-14
+
+### Données
+
+- Au-delà de l'heure couverte par "pluie dans l'heure", la prévision vient maintenant de
+  Météo-France (prévision de l'application mobile, la même que pour la neige et le verglas)
+  en France : verdict, frise, suite de la journée, température, ressenti et vent. Open-Meteo
+  reste la source hors de France et prend le relais sans rien dire si Météo-France ne répond
+  pas ou répond tronqué. Jusqu'ici Open-Meteo servait en France les données du modèle
+  allemand ICON.
+- Ce qui change à l'écran : au-delà de la première heure, la frise et le verdict sont au pas
+  horaire (couleur uniforme sur l'heure, les heures annoncées tombent sur des heures rondes),
+  la probabilité de pluie de la suite de la journée est donnée par tranches de 3 h, "Sec
+  jusqu'à" est à 3 h près au-delà d'environ 36 h, la ligne température / vent change une fois
+  par heure et le vent est arrondi au m/s par Météo-France.
+- Le cache hors réseau est renouvelé : la première visite après la mise à jour demande une
+  connexion.
+
+### Améliorations
+
+- Pied de page : Météo-France en tête, adresse de contact rétablie, Open-Meteo en dernier
+  avec la mention "repli".
+
 ## [1.6.0] - 2026-11-14
 
 ### Nouveautés
