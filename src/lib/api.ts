@@ -13,6 +13,8 @@ import {
   type ProbaSpan,
   type Slot,
   type Vigilance,
+  type VigilanceLevels,
+  VIGILANCE_PHENOMENA,
 } from './meteo'
 
 interface OpenMeteoPayload {
@@ -111,7 +113,6 @@ export interface RainResult {
 }
 
 const DEPT_RE = /^(\d{2}|2A|2B)$/
-const SNOW_ICE_PHENOMENON = '5'
 
 function deptOf(v: unknown): string | null {
   return typeof v === 'string' && DEPT_RE.test(v) ? v : null
@@ -258,27 +259,33 @@ export async function fetchForecastMF(place: Place, nowMs: number): Promise<MfFo
   }
 }
 
-// vigilance departementale de l'app mobile (meme webservice), couleur 1 vert a 4 rouge du
-// phenomene neige-verglas, echeance J ou J1 (J1 servie des le bulletin du matin)
-export async function fetchWarning(dept: string, echeance: 'J' | 'J1'): Promise<number | null> {
+// vigilance departementale de l'app mobile (meme webservice), couleur 1 vert a 4 rouge par
+// phenomene suivi (VIGILANCE_PHENOMENA), echeance J ou J1 (J1 servie des le bulletin du matin)
+export async function fetchWarning(dept: string, echeance: 'J' | 'J1'): Promise<VigilanceLevels> {
   const res = await fetch('https://webservice.meteofrance.com/v3/warning/currentphenomenons?domain='
     + encodeURIComponent(dept) + '&depth=1&echeance=' + echeance + '&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance vigilance http ' + res.status)
   const data = await res.json()
   const list = (Array.isArray(data.phenomenons_max_colors) ? data.phenomenons_max_colors : []) as
     { phenomenon_id?: unknown; phenomenon_max_color_id?: unknown }[]
-  const color = list.find((x) => String(x.phenomenon_id) === SNOW_ICE_PHENOMENON)?.phenomenon_max_color_id
-  return typeof color === 'number' && color >= 1 && color <= 4 ? color : null
+  const out: VigilanceLevels = {}
+  for (const x of list) {
+    const id = String(x.phenomenon_id)
+    const color = x.phenomenon_max_color_id
+    if (id in VIGILANCE_PHENOMENA && typeof color === 'number' && color >= 1 && color <= 4) out[id] = color
+  }
+  return out
 }
 
 export async function fetchVigilance(depts: (string | null)[]): Promise<Vigilance | null> {
   const list = [...new Set(depts.filter((d): d is string => d !== null))]
   if (!list.length) return null
-  const worst = async (echeance: 'J' | 'J1'): Promise<number | null> => {
+  const worst = async (echeance: 'J' | 'J1'): Promise<VigilanceLevels> => {
     const rs = await Promise.allSettled(list.map((d) => fetchWarning(d, echeance)))
-    let m: number | null = null
+    const m: VigilanceLevels = {}
     for (const r of rs) {
-      if (r.status === 'fulfilled' && r.value !== null && (m === null || r.value > m)) m = r.value
+      if (r.status !== 'fulfilled') continue
+      for (const [id, color] of Object.entries(r.value)) if ((m[id] ?? 0) < color) m[id] = color
     }
     return m
   }

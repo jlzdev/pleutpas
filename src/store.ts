@@ -7,6 +7,7 @@ import {
   hourlyEndMs,
   inFranceBounds,
   isMfPointUsable,
+  routeLabel,
   MAX_TRIP_MIN,
   MIN_TRIP_MIN,
   STEP_5MIN_MS,
@@ -39,6 +40,8 @@ const KEY_PLACE = 'pleutpas.place'
 const KEY_DEST = 'pleutpas.dest'
 const KEY_CACHE = 'pleutpas.cache'
 const KEY_REMINDER = 'pleutpas.reminderTime'
+const KEY_SAVED = 'pleutpas.saved'
+export const MAX_SAVED = 6
 const FORECAST_TTL_MS = 15 * 60 * 1000
 
 export function lsGet(key: string): string | null {
@@ -68,11 +71,45 @@ function placeFromQuery(q: URLSearchParams, latKey: string, lonKey: string, name
   return { name: cleanName(q.get(nameKey)) || coordsName(lat, lon), lat, lon }
 }
 
+export interface SavedTrip {
+  name: string
+  place: Place
+  dest: Place | null
+  tripMin: number
+}
+
+function clampTrip(v: number): number {
+  return Math.min(MAX_TRIP_MIN, Math.max(MIN_TRIP_MIN, v))
+}
+
+function loadSaved(): SavedTrip[] {
+  let raw: unknown = null
+  try { raw = JSON.parse(lsGet(KEY_SAVED) ?? 'null') } catch { /* entree corrompue */ }
+  if (!Array.isArray(raw)) return []
+  const out: SavedTrip[] = []
+  for (const item of raw as { name?: unknown; place?: unknown; dest?: unknown; tripMin?: unknown }[]) {
+    const place = parsePlace(item?.place)
+    const name = cleanName(item?.name)
+    if (!place || !name) continue
+    out.push({ name, place, dest: parsePlace(item.dest), tripMin: clampTrip(Number(item.tripMin) || 15) })
+    if (out.length === MAX_SAVED) break
+  }
+  return out
+}
+
 function loadPlaces(): [Place | null, Place | null] {
   const q = new URLSearchParams(location.search)
-  const keys = ['lat', 'lon', 'nom', 'alat', 'alon', 'anom']
+  const keys = ['lat', 'lon', 'nom', 'alat', 'alon', 'anom', 'fav']
   const fromUrl = keys.some((k) => q.has(k))
   if (fromUrl) history.replaceState(null, '', location.pathname)
+  const fav = loadSaved()[parseInt(q.get('fav') ?? '', 10) - 1]
+  if (fav) {
+    lsSet(KEY_PLACE, JSON.stringify(fav.place))
+    if (fav.dest) lsSet(KEY_DEST, JSON.stringify(fav.dest))
+    else lsRemove(KEY_DEST)
+    lsSet(KEY_TRIP, String(fav.tripMin))
+    return [fav.place, fav.dest]
+  }
   const urlPlace = placeFromQuery(q, 'lat', 'lon', 'nom')
   if (urlPlace) {
     const urlDest = placeFromQuery(q, 'alat', 'alon', 'anom')
@@ -91,10 +128,6 @@ function loadPlaces(): [Place | null, Place | null] {
 
 const [initialPlace, initialDest] = loadPlaces()
 
-function clampTrip(v: number): number {
-  return Math.min(MAX_TRIP_MIN, Math.max(MIN_TRIP_MIN, v))
-}
-
 function loadTrip(): number {
   return clampTrip(parseInt(lsGet(KEY_TRIP) ?? '', 10) || 15)
 }
@@ -102,6 +135,7 @@ function loadTrip(): number {
 export const place = ref<Place | null>(initialPlace)
 export const dest = ref<Place | null>(initialDest)
 export const tripMin = ref(loadTrip())
+export const saved = ref<SavedTrip[]>(loadSaved())
 export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? lsGet(KEY_REMINDER) as string : '08:00')
 export const forecast = ref<PointForecast | null>(null)
 export const forecastDest = ref<PointForecast | null>(null)
@@ -321,6 +355,49 @@ export function swapPlaces(): void {
   resetData()
 }
 
+const samePlace = (a: Place | null, b: Place | null): boolean => (!a && !b) || (!!a && !!b && a.lat === b.lat && a.lon === b.lon)
+
+export const savedIndex = computed(() => saved.value.findIndex((s) => samePlace(s.place, place.value) && samePlace(s.dest, dest.value)))
+
+function persistSaved(): void {
+  lsSet(KEY_SAVED, JSON.stringify(saved.value))
+}
+
+export const canSave = computed(() => savedIndex.value >= 0 || saved.value.length < MAX_SAVED)
+
+export function saveCurrent(name: string): boolean {
+  const p = place.value
+  if (!p || !canSave.value) return false
+  const entry: SavedTrip = { name: cleanName(name) || routeLabel(p, dest.value), place: p, dest: dest.value, tripMin: tripMin.value }
+  const list = [...saved.value]
+  if (savedIndex.value >= 0) list[savedIndex.value] = entry
+  else list.push(entry)
+  saved.value = list
+  persistSaved()
+  return true
+}
+
+export function removeSaved(i: number): void {
+  saved.value = saved.value.filter((_, k) => k !== i)
+  persistSaved()
+}
+
+export function applySaved(i: number): void {
+  const s = saved.value[i]
+  if (!s) return
+  if (samePlace(s.place, place.value) && samePlace(s.dest, dest.value)) {
+    if (s.tripMin !== tripMin.value) setTripMin(s.tripMin)
+    return
+  }
+  place.value = s.place
+  dest.value = s.dest
+  lsSet(KEY_PLACE, JSON.stringify(s.place))
+  if (s.dest) lsSet(KEY_DEST, JSON.stringify(s.dest))
+  else lsRemove(KEY_DEST)
+  setTripMin(s.tripMin)
+  resetData()
+}
+
 export function setTripMin(n: number): void {
   tripMin.value = n
   lsSet(KEY_TRIP, String(n))
@@ -351,6 +428,6 @@ declare global {
 }
 window.__pp = {
   place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
-  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs, forecastAt,
-  refresh, setPlace, setDest, swapPlaces, setDepartAt, fetchWarning, isMfPointUsable, hourlyEndMs,
+  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs, forecastAt, saved, savedIndex, canSave,
+  refresh, setPlace, setDest, swapPlaces, setDepartAt, saveCurrent, applySaved, removeSaved, fetchWarning, isMfPointUsable, hourlyEndMs,
 }

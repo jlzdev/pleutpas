@@ -65,9 +65,15 @@ export interface MfForecast {
   point: PointForecast
 }
 
+export const VIGILANCE_PHENOMENA: Record<string, string> = {
+  '1': 'vent violent', '2': 'pluie-inondation', '3': 'orages', '5': 'neige-verglas',
+}
+
+export type VigilanceLevels = Record<string, number>
+
 export interface Vigilance {
-  today: number | null
-  tomorrow: number | null
+  today: VigilanceLevels
+  tomorrow: VigilanceLevels
 }
 
 export interface InfoText {
@@ -410,15 +416,23 @@ export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: 
 
 export function fmtVigilance(v: Vigilance | null): InfoText | null {
   if (!v) return null
-  const level = (c: number | null) => (c !== null && c >= 2 ? c : null)
-  const today = level(v.today)
-  const tomorrow = level(v.tomorrow)
-  if (today && tomorrow && tomorrow > today) {
-    return { text: 'Vigilance ' + VIGILANCE_WORDS[today] + ' neige-verglas, ' + VIGILANCE_WORDS[tomorrow] + ' demain.', strong: tomorrow >= 3 }
+  const level = (c: number | undefined) => (c !== undefined && c >= 2 ? c : 0)
+  const today: { rank: number; text: string }[] = []
+  const tomorrow: { rank: number; text: string }[] = []
+  for (const [id, name] of Object.entries(VIGILANCE_PHENOMENA)) {
+    const d0 = level(v.today[id])
+    const d1 = level(v.tomorrow[id])
+    if (d0) today.push({ rank: d0, text: VIGILANCE_WORDS[d0] + ' ' + name })
+    if (d1 > d0) tomorrow.push({ rank: d1, text: VIGILANCE_WORDS[d1] + ' ' + name })
   }
-  if (today) return { text: 'Vigilance ' + VIGILANCE_WORDS[today] + ' neige-verglas.', strong: today >= 3 }
-  if (tomorrow) return { text: 'Vigilance ' + VIGILANCE_WORDS[tomorrow] + ' neige-verglas demain.', strong: tomorrow >= 3 }
-  return null
+  if (!today.length && !tomorrow.length) return null
+  const byRank = (a: { rank: number }, b: { rank: number }) => b.rank - a.rank
+  const parts = [
+    ...today.sort(byRank).map((p) => p.text),
+    ...(tomorrow.length ? ['demain ' + tomorrow.sort(byRank).map((p) => p.text).join(', ')] : []),
+  ]
+  const worst = Math.max(...today.map((p) => p.rank), ...tomorrow.map((p) => p.rank))
+  return { text: 'Vigilance ' + parts.join(', ') + '.', strong: worst >= 3 }
 }
 
 export const MF_MIN_HOURLY_H = 12

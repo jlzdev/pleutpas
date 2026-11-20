@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { dest, reminderTime, setDest, setPlace, setReminderTime, setTripMin, swapPlaces, tripMin } from '../store'
+import { computed, ref } from 'vue'
+import { applySaved, canSave, dest, MAX_SAVED, removeSaved, reminderTime, saveCurrent, saved, savedIndex, setDest, setPlace, setReminderTime, setTripMin, swapPlaces, tripMin, type SavedTrip } from '../store'
 import type { GeoResult } from '../lib/api'
 import { distanceKm, estimatedTripMin, fmtMinutes, MAX_TRIP_MIN, routeLabel, TRIP_SPEED_KMH, type Place } from '../lib/meteo'
-import { buildReminderIcs, downloadIcs, REMINDER_LEAD_MIN, reminderLabel as icsLabel } from '../lib/ics'
+import { buildReminderIcs, downloadIcs, placeUrl, REMINDER_LEAD_MIN, reminderLabel as icsLabel } from '../lib/ics'
 import { geolocSupported, useLocate } from '../lib/locate'
 import { setTheme, theme, type Theme } from '../lib/theme'
 import PlaceSearch from './PlaceSearch.vue'
@@ -42,6 +42,38 @@ function onReminder(e: Event): void {
 const reminderLabel = computed(() => icsLabel(reminderTime.value))
 
 const label = computed(() => routeLabel(props.place, dest.value))
+const shareMsg = ref('')
+const saveName = ref('')
+let shareTimer = 0
+
+const SHARE_SVG = 'M18 16.08c-.76 0-1.44.3-1.96.77L8.91 12.7c.05-.23.09-.46.09-.7s-.04-.47-.09-.7l7.05-4.11c.54.5 1.25.81 2.04.81 1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3c0 .24.04.47.09.7L8.04 9.81C7.5 9.31 6.79 9 6 9c-1.66 0-3 1.34-3 3s1.34 3 3 3c.79 0 1.5-.31 2.04-.81l7.12 4.16c-.05.21-.08.43-.08.65 0 1.61 1.31 2.92 2.92 2.92s2.92-1.31 2.92-2.92-1.31-2.92-2.92-2.92z'
+
+async function shareTrip(place: Place, to: Place | null, name = routeLabel(place, to)): Promise<void> {
+  const url = placeUrl(place, to)
+  const text = 'Je peux rouler ? ' + name
+  clearTimeout(shareTimer)
+  shareMsg.value = ''
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Pleut pas ? ' + name, text, url })
+      return
+    }
+    await navigator.clipboard.writeText(url)
+    shareMsg.value = 'Lien copié, colle-le où tu veux.'
+  } catch (e) {
+    if (e instanceof DOMException && e.name === 'AbortError') return
+    shareMsg.value = 'Partage indisponible, le lien est : ' + url
+  }
+  shareTimer = window.setTimeout(() => { shareMsg.value = '' }, 8000)
+}
+
+function shareSaved(s: SavedTrip): Promise<void> {
+  return shareTrip(s.place, s.dest, s.name)
+}
+
+function save(): void {
+  if (saveCurrent(saveName.value)) saveName.value = ''
+}
 
 function addReminder(): void {
   const ics = buildReminderIcs(props.place, reminderTime.value, new Date(), dest.value)
@@ -61,34 +93,70 @@ function pickDest(r: GeoResult): void {
 <template>
   <section class="card">
     <h2 class="hdr">Réglages</h2>
-    <label class="mb-2 block text-sm" for="tripRange">Durée du trajet : <b>{{ tripMin }} min</b></label>
+    <div class="grid grid-cols-[24px_minmax(0,1fr)_42px] gap-x-2 gap-y-2">
+      <svg class="row-span-2 h-[100px] w-6 self-start" viewBox="0 0 24 100" fill="none" aria-hidden="true">
+        <circle cx="12" cy="23" r="5.5" stroke="currentColor" stroke-width="2" class="text-dim"/>
+        <circle cx="12" cy="41" r="1.5" fill="currentColor" class="text-dim"/>
+        <circle cx="12" cy="48" r="1.5" fill="currentColor" class="text-dim"/>
+        <circle cx="12" cy="55" r="1.5" fill="currentColor" class="text-dim"/>
+        <path class="text-accent" fill="currentColor" d="M12 65c-4.4 0-8 3.4-8 7.8C4 78.7 12 88 12 88s8-9.3 8-15.2c0-4.4-3.6-7.8-8-7.8zm0 10.6a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6z"/>
+      </svg>
+      <PlaceSearch id="placeInput" :near="place" :current="place.name" label="Point de départ" placeholder="Point de départ" @pick="pickPlace" />
+      <button
+        type="button" class="iconbtn row-span-2 self-center" :class="dest ? '' : 'invisible'"
+        aria-label="Inverser le sens du trajet" title="Inverser le sens du trajet" @click="swapPlaces"
+      >
+        <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 3 3 7h3v10h2V7h3L7 3zm10 18 4-4h-3V7h-2v10h-3l4 4z"/></svg>
+      </button>
+      <PlaceSearch id="destInput" :near="place" :current="dest ? dest.name : ''" label="Arrivée" placeholder="Arrivée (facultatif)" :clearable="dest !== null" @pick="pickDest" @clear="setDest(null)" />
+    </div>
+    <div class="mt-2.5 flex flex-wrap items-center gap-2">
+      <button
+        v-if="geolocSupported" type="button"
+        class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line bg-panel2 px-3 py-1.5 text-[13px] font-semibold text-ink active:bg-line disabled:cursor-wait"
+        :disabled="locating" @click="locateMe"
+      >
+        <span v-if="locating" class="block h-4 w-4 animate-spin rounded-full border-2 border-line border-t-ink"></span>
+        <svg v-else class="h-4 w-4 text-accent" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>
+        Partir de ma position
+      </button>
+    </div>
+    <div v-if="geoMessage" class="mt-2 text-[13px] text-dim">{{ geoMessage }}</div>
+    <p v-if="!dest" class="mt-2 text-[13px] text-dim">Avec une arrivée, la pluie est lue tout le long du trajet, à l'heure où tu y passes.</p>
+    <label class="mb-2 mt-4 block text-sm" for="tripRange">Durée du trajet : <b>{{ tripMin }} min</b></label>
     <input id="tripRange" type="range" class="w-full accent-legere" min="5" :max="MAX_TRIP_MIN" step="5" :value="tripMin" @input="onTrip">
     <p v-if="tripHint" class="mt-1 text-[13px]" :class="tripHint.warn ? 'text-warn' : 'text-dim'">{{ tripHint.text }}</p>
-    <label class="mb-2 mt-4 block text-sm" for="placeInput">{{ dest ? 'Départ' : 'Lieu' }} : <b>{{ place.name }}</b></label>
-    <PlaceSearch id="placeInput" :near="place" @pick="pickPlace">
-      <template #aside>
-        <button
-          v-if="geolocSupported"
-          class="inline-flex h-[46px] w-[46px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-line bg-panel2 text-ink active:bg-line disabled:cursor-wait"
-          :disabled="locating" :aria-label="locating ? 'Localisation en cours' : 'Utiliser ma position'" title="Utiliser ma position" @click="locateMe"
+    <details class="group mt-4">
+      <summary class="flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line [&::-webkit-details-marker]:hidden">
+        <span>Mes trajets <span class="text-dim">({{ saved.length }})</span></span>
+        <svg class="h-4 w-4 flex-none text-dim transition-transform group-open:rotate-180" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
+      </summary>
+      <label class="mb-2 mt-3 block text-sm" for="saveName">Garder le trajet affiché, <b>{{ label }}</b> :</label>
+      <div class="flex gap-2">
+        <input
+          id="saveName" v-model="saveName" type="text" maxlength="30" placeholder="Nom (Travail, École...)"
+          class="min-w-0 flex-1 rounded-[10px] border border-field-line bg-field px-3 py-2.5 text-[15px] text-ink placeholder:text-dim"
+          @keydown.enter.prevent="save"
         >
-          <span v-if="locating" class="block h-4 w-4 animate-spin rounded-full border-2 border-line border-t-ink"></span>
-          <svg v-else class="h-5 w-5" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>
-        </button>
-      </template>
-    </PlaceSearch>
-    <div v-if="geoMessage" class="mt-2 text-[13px] text-dim">{{ geoMessage }}</div>
-    <label class="mb-2 mt-4 block text-sm" for="destInput">Arrivée (facultatif) : <b>{{ dest ? dest.name : 'aucune' }}</b></label>
-    <PlaceSearch id="destInput" :near="place" :clearable="dest !== null" @pick="pickDest" @clear="setDest(null)" />
-    <button v-if="dest" class="mt-2 w-full cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line" @click="swapPlaces">Inverser le sens</button>
-    <p v-else class="mt-1.5 text-[13px] text-dim">Avec une arrivée, la pluie est lue tout le long du trajet, à l'heure où tu y passes.</p>
-    <div class="mb-2 mt-4 text-sm" id="themeLabel">Affichage : <b>{{ THEMES.find((t) => t.value === theme)?.label }}</b></div>
-    <div class="flex gap-2" role="radiogroup" aria-labelledby="themeLabel">
-      <button
-        v-for="t in THEMES" :key="t.value" type="button" role="radio" :aria-checked="theme === t.value"
-        class="pickbtn flex-1" :class="theme === t.value ? '' : 'pickbtn-dim'" @click="setTheme(t.value)"
-      >{{ t.label }}</button>
-    </div>
+        <button type="button" class="pickbtn flex-none" :disabled="!canSave" @click="save">{{ savedIndex >= 0 ? 'Mettre à jour' : 'Enregistrer' }}</button>
+      </div>
+      <p v-if="!canSave" class="mt-1.5 text-[13px] text-warn">{{ MAX_SAVED }} trajets au plus : retire-en un pour en ajouter.</p>
+      <ul v-if="saved.length" class="mt-3 flex flex-col gap-1.5" aria-label="Mes trajets">
+        <li v-for="(s, i) in saved" :key="s.name + i" class="flex items-center gap-2">
+          <button type="button" class="pickbtn min-w-0 flex-1 truncate text-left" :class="i === savedIndex ? '' : 'pickbtn-dim'" :aria-pressed="i === savedIndex" @click="applySaved(i)">
+            {{ s.name }} <span class="font-normal text-dim">· {{ s.tripMin }} min</span>
+          </button>
+          <button type="button" class="iconbtn" :aria-label="'Partager ' + s.name" :title="'Partager ' + s.name" @click="shareSaved(s)">
+            <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path :d="SHARE_SVG"/></svg>
+          </button>
+          <button type="button" class="iconbtn" :aria-label="'Retirer ' + s.name" :title="'Retirer ' + s.name" @click="removeSaved(i)">
+            <svg class="h-4 w-4" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg>
+          </button>
+        </li>
+      </ul>
+      <p v-if="shareMsg" class="mt-1.5 break-all text-[13px] text-dim" role="status">{{ shareMsg }}</p>
+      <p class="mt-1.5 text-[13px] text-dim">Un appui ici ou sur les puces en haut de la page rappelle le trajet. Les deux premiers sont aussi dans le menu de l'icône de l'app (appui long, Android).</p>
+    </details>
     <details class="group mt-4">
       <summary class="flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line [&::-webkit-details-marker]:hidden">
         <span>Rappel dans mon agenda <span class="text-dim">(facultatif)</span></span>
@@ -98,13 +166,20 @@ function pickDest(r: GeoResult): void {
       <div class="flex gap-2">
         <input
           id="reminderTime" type="time" :value="reminderTime" step="300"
-          class="min-w-0 flex-1 rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-[15px] text-ink"
+          class="min-w-0 flex-1 rounded-[10px] border border-field-line bg-field px-3 py-2.5 text-[15px] text-ink"
           @change="onReminder"
         >
         <button class="flex-none cursor-pointer rounded-[10px] border border-line bg-panel2 px-3.5 py-2.5 text-sm active:bg-line" @click="addReminder">Ajouter à mon agenda</button>
       </div>
       <p class="mt-1.5 text-[13px] text-dim">Ton agenda te préviendra {{ REMINDER_LEAD_MIN }} min avant, du lundi au vendredi, et un tap ouvrira la météo de {{ label }}.</p>
     </details>
-    <button type="button" class="mt-4 w-full cursor-pointer rounded-[10px] border border-legere/60 bg-panel2 px-3 py-3 text-[15px] font-semibold text-ink active:bg-line" @click="emit('close')">C'est bon</button>
+    <div class="mb-2 mt-4 text-sm" id="themeLabel">Affichage : <b>{{ THEMES.find((t) => t.value === theme)?.label }}</b></div>
+    <div class="flex gap-2" role="radiogroup" aria-labelledby="themeLabel">
+      <button
+        v-for="t in THEMES" :key="t.value" type="button" role="radio" :aria-checked="theme === t.value"
+        class="pickbtn flex-1" :class="theme === t.value ? '' : 'pickbtn-dim'" @click="setTheme(t.value)"
+      >{{ t.label }}</button>
+    </div>
+    <button type="button" class="mt-4 w-full cursor-pointer rounded-[10px] border border-accent/60 bg-panel2 px-3 py-3 text-[15px] font-semibold text-ink active:bg-line" @click="emit('close')">C'est bon</button>
   </section>
 </template>

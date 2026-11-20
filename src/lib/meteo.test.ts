@@ -311,13 +311,16 @@ describe('hiver et vigilance', () => {
     expect(winterNote(a, null, true, NOW)?.text).toBe('Neige au départ en ce moment.')
     expect(winterNote(null, null, true, NOW)).toBeNull()
   })
-  it('vigilance neige-verglas', () => {
+  it('vigilance par phénomène, la plus sévère en premier', () => {
     expect(fmtVigilance(null)).toBeNull()
-    expect(fmtVigilance({ today: 1, tomorrow: 1 })).toBeNull()
-    expect(fmtVigilance({ today: 2, tomorrow: null })).toEqual({ text: 'Vigilance jaune neige-verglas.', strong: false })
-    expect(fmtVigilance({ today: 3, tomorrow: 2 })).toEqual({ text: 'Vigilance orange neige-verglas.', strong: true })
-    expect(fmtVigilance({ today: 2, tomorrow: 3 })).toEqual({ text: 'Vigilance jaune neige-verglas, orange demain.', strong: true })
-    expect(fmtVigilance({ today: 1, tomorrow: 4 })).toEqual({ text: 'Vigilance rouge neige-verglas demain.', strong: true })
+    expect(fmtVigilance({ today: { '5': 1 }, tomorrow: { '5': 1 } })).toBeNull()
+    expect(fmtVigilance({ today: { '5': 2 }, tomorrow: {} })).toEqual({ text: 'Vigilance jaune neige-verglas.', strong: false })
+    expect(fmtVigilance({ today: { '5': 3 }, tomorrow: { '5': 2 } })).toEqual({ text: 'Vigilance orange neige-verglas.', strong: true })
+    expect(fmtVigilance({ today: { '5': 2 }, tomorrow: { '5': 3 } })).toEqual({ text: 'Vigilance jaune neige-verglas, demain orange neige-verglas.', strong: true })
+    expect(fmtVigilance({ today: { '5': 1 }, tomorrow: { '5': 4 } })).toEqual({ text: 'Vigilance demain rouge neige-verglas.', strong: true })
+    expect(fmtVigilance({ today: { '1': 2, '3': 3, '9': 4 }, tomorrow: { '2': 2 } })).toEqual({ text: 'Vigilance orange orages, jaune vent violent, demain jaune pluie-inondation.', strong: true })
+    expect(fmtVigilance({ today: { '2': 2 }, tomorrow: { '1': 2 } })?.text).toBe('Vigilance jaune pluie-inondation, demain jaune vent violent.')
+    expect(fmtVigilance({ today: { '1': 2, '3': 3 }, tomorrow: { '1': 3, '3': 3 } })?.text).toBe('Vigilance orange orages, jaune vent violent, demain orange vent violent.')
   })
 })
 

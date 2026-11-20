@@ -6,6 +6,15 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.14.0] - 2026-11-20
+
+### Améliorations
+
+- Trajets enregistrés : dans les réglages, "Enregistrer" garde le trajet affiché (départ, arrivée, durée) sous un nom au choix (ligne "Enregistrer le trajet"), six au plus, liste repliée dans "Mes trajets" (au-delà, retirer un trajet ; ré-enregistrer un trajet le met à jour à sa place) ; les trajets enregistrés se rappellent d'un appui dans une rangée de puces sous l'en-tête, et les deux premiers sont dans le menu de l'icône de l'app (appui long sur Android, liens ?fav=1 et ?fav=2).
+- Vigilance Météo-France étendue : vent violent, orages et pluie-inondation en plus de neige-verglas, dans une seule phrase sous le verdict, la plus sévère en premier, puis ce qui s'aggrave demain ("Vigilance orange orages, jaune vent violent, demain orange vent violent").
+- Thème clair affiné : champs de saisie blancs à bordure marquée, distincts des boutons, textes secondaires et titres plus foncés.
+- Partager ce lieu ou ce trajet : icône de partage dans les réglages, à côté du champ d'enregistrement et sur chaque trajet enregistré ; ouvre le partage du téléphone (ou copie le lien), le lien ouvre Pleut pas ? directement sur le trajet.
+
 ## [1.13.0] - 2026-11-20
 
 ### Améliorations

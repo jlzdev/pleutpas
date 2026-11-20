@@ -2,7 +2,7 @@
 import { onBeforeUnmount, ref, watch } from 'vue'
 import { searchPlaces, type GeoNear, type GeoResult } from '../lib/api'
 
-const props = defineProps<{ id: string; near?: GeoNear; clearable?: boolean }>()
+const props = defineProps<{ id: string; near?: GeoNear; clearable?: boolean; current?: string; label?: string; placeholder?: string }>()
 const emit = defineEmits<{ pick: [r: GeoResult]; clear: [] }>()
 
 const MIN_CHARS = 3
@@ -16,6 +16,7 @@ const searching = ref(false)
 let timer = 0
 let controller: AbortController | null = null
 let searchSeq = 0
+let skipSearch = false
 
 async function search(): Promise<void> {
   const q = query.value.trim()
@@ -44,8 +45,18 @@ async function search(): Promise<void> {
 
 watch(query, () => {
   clearTimeout(timer)
+  if (skipSearch) {
+    skipSearch = false
+    return
+  }
   timer = window.setTimeout(search, DEBOUNCE_MS)
 })
+
+watch(() => props.current ?? '', (v) => {
+  if (query.value === v) return
+  skipSearch = true
+  query.value = v
+}, { immediate: true })
 
 function onEnter(): void {
   clearTimeout(timer)
@@ -69,7 +80,7 @@ function onEscape(): void {
   searching.value = false
 }
 
-function label(r: GeoResult): string {
+function resultLabel(r: GeoResult): string {
   return r.name + (r.area ? ' (' + r.area + ')' : '')
 }
 
@@ -95,11 +106,12 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <div>
   <div class="flex gap-2">
     <div class="relative min-w-0 flex-1">
       <input
-        :id="id" v-model="query" type="search" placeholder="Ville, ou rue et ville..." autocomplete="off"
-        class="w-full rounded-[10px] border border-line bg-panel2 py-2.5 pl-3 text-[15px] text-ink"
+        :id="id" v-model="query" type="search" :placeholder="placeholder ?? 'Ville, ou rue et ville...'" :aria-label="label" autocomplete="off"
+        class="w-full rounded-[10px] border border-field-line bg-field py-2.5 pl-3 text-[15px] text-ink placeholder:text-dim"
         :class="query || clearable ? 'pr-16' : 'pr-3'"
         @keydown.enter.prevent="onEnter" @keydown.escape="onEscape"
       >
@@ -120,8 +132,9 @@ onBeforeUnmount(() => {
     >
       <svg v-if="r.kind === 'town'" class="h-4 w-4 flex-none text-dim" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 14V7l3-2 3 2v7H1zm8 0V3l6-2v13H9zm2-9h2V4h-2v1zm0 3h2V7h-2v1zm0 3h2v-1h-2v1zM3 9h1V8H3v1zm2 0h1V8H5v1zm-2 3h1v-1H3v1zm2 0h1v-1H5v1z"/></svg>
       <svg v-else class="h-4 w-4 flex-none text-dim" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 1a5 5 0 0 0-5 5c0 3.6 5 9 5 9s5-5.4 5-9a5 5 0 0 0-5-5zm0 7a2 2 0 1 1 0-4 2 2 0 0 1 0 4z"/></svg>
-      <span class="min-w-0 flex-1 truncate">{{ label(r) }}</span>
+      <span class="min-w-0 flex-1 truncate">{{ resultLabel(r) }}</span>
     </button>
     <div v-if="message" class="text-[13px] text-dim">{{ message }}</div>
+  </div>
   </div>
 </template>

@@ -398,7 +398,7 @@ onBeforeUnmount(() => {
     <template v-else>
       <div class="mt-2.5 flex items-center gap-2.5">
         <button class="iconbtn" :aria-label="playing ? 'Pause' : 'Lecture'" @click="togglePlay">
-          <span v-if="playing">❚❚</span><span v-else>▶&#xFE0E;</span>
+          <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path :d="playing ? 'M6 19h4V5H6v14zm8-14v14h4V5h-4z' : 'M8 5v14l11-7z'"/></svg>
         </button>
         <input
           type="range" class="flex-1 accent-legere" aria-label="Instant affiché sur la carte"
