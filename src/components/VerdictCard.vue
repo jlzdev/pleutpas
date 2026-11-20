@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, radarPending, refreshing, trip, tripMin, vigilance } from '../store'
-import { bearingDeg, computeVerdict, conditionsAt, fmtConditions, fmtHM, fmtVigilance, routeLabel, winterNote, type InfoText, type Place, type VerdictView } from '../lib/meteo'
+import { departAt, dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, radarPending, refMs, refreshing, setDepartAt, trip, tripMin, vigilance } from '../store'
+import { bearingDeg, clockParts, computeVerdict, conditionsAt, departureMs, fmtConditions, fmtDayHM, fmtVigilance, routeLabel, winterNote, type InfoText, type Place, type VerdictView } from '../lib/meteo'
+import { sunNote } from '../lib/sun'
 
 const props = defineProps<{ place: Place }>()
 
@@ -14,12 +15,12 @@ const verdict = computed<VerdictView>(() => {
   if (radarPending.value && frameSamples.value === null) {
     return { state: 'inconnu', big: '...', sub: 'Vérification du radar', detail: '' }
   }
-  return computeVerdict(trip.value, tripMin.value, nowTick.value, fetchedAt.value)
+  return computeVerdict(trip.value, tripMin.value, nowTick.value, fetchedAt.value, refMs.value)
 })
 
 const conditions = computed(() => {
   if (!forecast.value || verdict.value.state === 'inconnu') return null
-  const c = conditionsAt(forecast.value.conditions, nowTick.value)
+  const c = conditionsAt(forecast.value.conditions, refMs.value)
   if (!c) return null
   const d = dest.value
   return fmtConditions(c, d ? bearingDeg(props.place, d) : null)
@@ -28,17 +29,30 @@ const conditions = computed(() => {
 const notes = computed<InfoText[]>(() => {
   if (!forecast.value || verdict.value.state === 'inconnu') return []
   const out: InfoText[] = []
-  const winter = winterNote(forecastMF.value, forecastMFDest.value, dest.value !== null, nowTick.value)
+  const winter = winterNote(forecastMF.value, forecastMFDest.value, dest.value !== null, refMs.value, nowTick.value)
   if (winter) out.push(winter)
   const v = fmtVigilance(vigilance.value)
   if (v) out.push(v)
+  const sun = sunNote(props.place, refMs.value, tripMin.value, nowTick.value)
+  if (sun) out.push(sun)
   return out
 })
 
+const departText = computed(() => (departAt.value === null ? 'maintenant' : fmtDayHM(departAt.value, nowTick.value)))
+const departValue = computed(() => {
+  if (departAt.value === null) return ''
+  const { h, m } = clockParts(departAt.value)
+  return String(h).padStart(2, '0') + ':' + String(m).padStart(2, '0')
+})
+
+function onDepart(e: Event): void {
+  const v = (e.target as HTMLInputElement).value
+  setDepartAt(v ? departureMs(v, Date.now()) : null)
+}
+
 const foot = computed(() => {
   const d = dest.value
-  const head = d ? routeLabel(props.place, d) + ', ' + tripMin.value + ' min' : 'Trajet de ' + tripMin.value + ' min'
-  return head + ', données de ' + fmtHM(fetchedAt.value as number)
+  return d ? routeLabel(props.place, d) + ', ' + tripMin.value + ' min' : 'trajet de ' + tripMin.value + ' min'
 })
 </script>
 
@@ -50,12 +64,21 @@ const foot = computed(() => {
     <div class="text-[clamp(44px,14vw,72px)] font-extrabold leading-none tracking-wide desk:text-[84px]">{{ verdict.big }}</div>
     <div class="mt-1 text-lg font-semibold leading-tight desk:text-[22px]">{{ verdict.sub }}</div>
     <div v-if="verdict.detail" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">{{ verdict.detail }}</div>
-    <div v-if="conditions" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">
-      {{ conditions.temp }} <span :class="{ 'font-bold': conditions.strong, 'text-amber-300': conditions.strong && verdict.state !== 'bof' }">{{ conditions.wind }}</span>
+    <div v-if="conditions || notes.length" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px] [text-wrap:pretty]">
+      <template v-if="conditions">{{ conditions.temp }} <span :class="{ 'font-bold': conditions.strong, 'text-amber-300': conditions.strong && verdict.state !== 'bof' }">{{ conditions.wind }}</span></template>
+      <span v-for="n in notes" :key="n.text" :class="{ 'font-bold': n.strong, 'text-amber-300': n.strong && verdict.state !== 'bof' }">{{ ' ' + n.text }}</span>
     </div>
-    <div v-if="notes.length" class="mt-0.5 text-sm leading-snug opacity-90 desk:text-[17px]">
-      <span v-for="(n, i) in notes" :key="n.text" :class="{ 'font-bold': n.strong, 'text-amber-300': n.strong && verdict.state !== 'bof' }">{{ (i ? ' ' : '') + n.text }}</span>
+    <div class="mt-1 flex flex-wrap items-center justify-center gap-x-1.5 text-[13px] leading-snug opacity-80 desk:text-[15px]">
+      <span class="relative inline-flex cursor-pointer items-center gap-0.5 rounded px-1 py-1.5 font-semibold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-white">
+        Départ {{ departText }}
+        <svg class="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 6l5 5 5-5"/></svg>
+        <input
+          type="time" step="300" autocomplete="off" :value="departValue" aria-label="Heure de départ, maintenant si vide"
+          class="absolute inset-0 h-full w-full cursor-pointer opacity-0" @change="onDepart"
+        >
+      </span>
+      <button v-if="departAt !== null" type="button" class="-ml-1 cursor-pointer rounded px-1.5 py-1 text-sm leading-none" aria-label="Revenir à maintenant" title="Revenir à maintenant" @click="setDepartAt(null)">✕</button>
+      <span>· {{ foot }}</span>
     </div>
-    <div v-if="fetchedAt" class="mt-1.5 text-xs opacity-75">{{ foot }}</div>
   </section>
 </template>

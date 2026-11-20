@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref } from 'vue'
-import { dest, forecast, nowTick } from '../store'
+import { dest, forecast, nowTick, refMs } from '../store'
 import { clockParts, dayCells, fmtDay, fmtDayHM, fmtHM, fmtMm, HOUR_MS, intensityColor, nextWetSlotMs } from '../lib/meteo'
 
 type CellKind = 'sure' | 'incertain' | 'averse' | 'sec'
@@ -28,7 +28,7 @@ const onDesk = (e: MediaQueryListEvent) => { desk.value = e.matches }
 deskQuery.addEventListener('change', onDesk)
 onBeforeUnmount(() => deskQuery.removeEventListener('change', onDesk))
 
-const day = computed(() => dayCells(forecast.value, nowTick.value))
+const day = computed(() => dayCells(forecast.value, refMs.value))
 const leftOf = (i: number) => (i / 24) * 100 + '%'
 const hatch = (color: string) => 'repeating-linear-gradient(135deg, color-mix(in srgb, ' + color + ' ' + HATCH_MIX + '%, ' + DRY_CELL + ') 0 2px, transparent 2px 5px)'
 
@@ -123,7 +123,7 @@ const note = computed(() => {
       const endRun = run.end < cs.length ? cs[run.end].start : endMs
       return 'Averses possibles entre ' + fmtDayHM(cs[run.start].start, nowTick.value) + ' et ' + fmtDayHM(endRun, nowTick.value) + ', sans cumul notable.'
     }
-    const next = forecast.value ? nextWetSlotMs(forecast.value.rain, endMs, nowTick.value + 48 * HOUR_MS) : -1
+    const next = forecast.value ? nextWetSlotMs(forecast.value.rain, endMs, refMs.value + 48 * HOUR_MS) : -1
     return 'Pas de pluie prévue d\'ici ' + fmtDayHM(endMs, nowTick.value)
       + (next >= 0 ? ', prochaine pluie vers ' + fmtDayHM(next, nowTick.value) + '.' : '.')
   }

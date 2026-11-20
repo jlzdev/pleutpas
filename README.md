@@ -2,7 +2,9 @@
 
 Est-ce que je peux prendre mon vélo maintenant, et sinon à quelle heure ? Gros verdict
 OUI / PLUIE selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
-heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée.
+heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée,
+pour un départ maintenant ou à l'heure de son choix (retour du soir, lendemain matin) ;
+nuit au départ ou pendant le trajet indiquée sous le verdict (lever et coucher calculés localement).
 Lieu choisi au premier lancement (géolocalisation, recherche de ville ou d'adresse, épingle posée sur la carte, ou URL), mémorisé sur l'appareil,
 arrivée facultative (la pluie est alors lue tout le long du trajet, en ligne droite, à
 l'heure où l'on passe à chaque endroit, et le vent devient "de face", "de dos" ou "de
@@ -73,7 +75,9 @@ npm install
 npm run dev
 ```
 
-`npm run build` inclut le typecheck (vue-tsc). Pour générer les frames en local,
+`npm run build` inclut le typecheck (vue-tsc). `npm test` lance les tests vitest de la
+logique métier (`src/lib/meteo.test.ts`, `src/lib/sun.test.ts`), exécutés aussi par la CI.
+Pour générer les frames en local,
 mettre la clé dans `.env.local` (`MF_API_KEY=...`, fichier non versionné) puis
 `npm run piaf` ou `npm run data`.
 

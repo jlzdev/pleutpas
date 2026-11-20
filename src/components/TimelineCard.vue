@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { dest, nowTick, trip, tripMin } from '../store'
-import { clockParts, fmtHM, fmtMinutes, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
+import { departAt, dest, nowTick, refMs, trip, tripMin } from '../store'
+import { clockParts, fmtDayHM, fmtHM, fmtMinutes, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
 
-const cells = computed<TimelineCell[]>(() => timelineCells(trip.value, nowTick.value, tripMin.value))
+const cells = computed<TimelineCell[]>(() => timelineCells(trip.value, refMs.value, tripMin.value))
 const tripMode = computed(() => dest.value !== null)
+const departNow = computed(() => departAt.value === null)
+const title = computed(() => {
+  const c = cells.value
+  if (departNow.value || !c.length) return tripMode.value ? 'Si tu pars dans les 2 prochaines heures' : 'Les 2 prochaines heures'
+  const from = fmtDayHM(refMs.value, nowTick.value)
+  const to = fmtHM(c[c.length - 1].start + STEP_5MIN_MS)
+  return tripMode.value ? 'Si tu pars entre ' + from + ' et ' + to : 'De ' + from + ' à ' + to
+})
 
 const rainMarks = computed(() => {
   const c = cells.value
@@ -43,7 +51,7 @@ function tripNote(c: TimelineCell[], horizon: string): string {
     const calm = c.findIndex(x => !x.wet)
     return calm < 0
       ? 'Pluie sur le trajet quelle que soit l\'heure de départ ' + horizon + '.'
-      : 'Pluie sur le trajet si tu pars maintenant, départ au sec à partir de ' + fmtHM(c[calm].start) + '.'
+      : 'Pluie sur le trajet si tu pars ' + (departNow.value ? 'maintenant' : 'à ' + fmtHM(refMs.value)) + ', départ au sec à partir de ' + fmtHM(c[calm].start) + '.'
   }
   const from = fmtHM(c[firstWet].start)
   return lastWet === c.length - 1
@@ -55,34 +63,35 @@ const note = computed(() => {
   const c = cells.value
   if (!c.length) return 'Pas de données pour le moment.'
   const horizon = c.length >= 24
-    ? 'sur les 2 prochaines heures'
+    ? (departNow.value ? 'sur les 2 prochaines heures' : 'sur ces 2 heures')
     : 'd\'ici ' + fmtHM(c[c.length - 1].start + STEP_5MIN_MS)
   if (tripMode.value) return tripNote(c, horizon)
   const firstWet = c.findIndex(x => x.wet)
   if (firstWet < 0) return 'Pas de pluie prévue ' + horizon + '.'
   if (firstWet === 0) {
     const calm = c.findIndex(x => !x.wet)
+    const start = departNow.value ? 'Pluie en ce moment' : 'Pluie à ' + fmtHM(refMs.value)
     return calm < 0
-      ? 'Pluie en ce moment, sans interruption ' + horizon + '.'
-      : 'Pluie en ce moment, accalmie vers ' + fmtHM(c[calm].start) + '.'
+      ? start + ', sans interruption ' + horizon + '.'
+      : start + ', accalmie vers ' + fmtHM(c[calm].start) + '.'
   }
   const startMs = c[firstWet].start
   const mins = Math.max(1, Math.round((startMs - nowTick.value) / 60000))
   let lastWet = c.length - 1
   while (!c[lastWet].wet) lastWet--
-  const head = 'Pluie dans ' + fmtMinutes(mins)
+  const head = departNow.value ? 'Pluie dans ' + fmtMinutes(mins) + ',' : 'Pluie'
   return lastWet === c.length - 1
-    ? head + ', à partir de ' + fmtHM(startMs) + '.'
-    : head + ', de ' + fmtHM(startMs) + ' à ' + fmtHM(c[lastWet].start + STEP_5MIN_MS) + '.'
+    ? head + ' à partir de ' + fmtHM(startMs) + '.'
+    : head + ' de ' + fmtHM(startMs) + ' à ' + fmtHM(c[lastWet].start + STEP_5MIN_MS) + '.'
 })
 </script>
 
 <template>
   <section class="card">
-    <h2 class="hdr">{{ tripMode ? 'Si tu pars dans les 2 prochaines heures' : 'Les 2 prochaines heures' }}</h2>
+    <h2 class="hdr">{{ title }}</h2>
     <template v-if="cells.length">
       <div class="mb-1 text-[11px] text-dim">{{ tripMode ? 'Chaque case = un départ à cette heure, couleur = la pluie la plus forte sur le trajet' : 'Chaque case = 5 min, couleur = intensité de la pluie' }}</div>
-      <div class="flex h-7 gap-px overflow-hidden rounded-md desk:h-9">
+      <div class="flex h-7 gap-px overflow-hidden rounded-md desk:h-9" role="img" :aria-label="note">
         <span
           v-for="(c, i) in cells" :key="i" :title="c.title"
           class="flex-1" :style="{ background: c.color ?? 'var(--color-line)' }"

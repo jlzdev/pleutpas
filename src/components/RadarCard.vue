@@ -337,7 +337,7 @@ onMounted(() => {
     maxBounds: MAX_BOUNDS,
     maxBoundsViscosity: 1,
   }).setView(here, POINT_ZOOM)
-  L.control.zoom({ position: 'topright' }).addTo(map)
+  L.control.zoom({ position: 'topright', zoomInTitle: 'Zoomer', zoomOutTitle: 'Dézoomer' }).addTo(map)
   L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: MAX_ZOOM, attribution: '© OpenStreetMap | Météo-France',
   }).addTo(map)
@@ -400,7 +400,8 @@ onBeforeUnmount(() => {
           <span v-if="playing">❚❚</span><span v-else>▶&#xFE0E;</span>
         </button>
         <input
-          type="range" class="flex-1 accent-legere"
+          type="range" class="flex-1 accent-legere" aria-label="Instant affiché sur la carte"
+          :aria-valuetext="current ? (current.type === 'fcst' ? 'prévision ' : 'radar ') + fmtHM(current.time * 1000) : ''"
           min="0" :max="maxIdx" :value="frameIdx" @input="onSlide"
         >
         <div class="min-w-[88px] text-right text-sm tabular-nums">

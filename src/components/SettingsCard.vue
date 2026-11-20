@@ -58,13 +58,8 @@ function pickDest(r: GeoResult): void {
 
 <template>
   <section class="card">
-    <div class="flex items-start justify-between gap-2">
-      <h2 class="hdr">Réglages</h2>
-      <button
-        type="button" class="-mr-2 -mt-2 flex h-9 w-9 flex-none cursor-pointer items-center justify-center text-xl leading-none text-dim active:text-ink"
-        aria-label="Fermer les réglages" @click="emit('close')"
-      >✕</button>
-    </div>
+    <h2 class="hdr !mb-1">Réglages</h2>
+    <p class="mb-3 text-[13px] text-dim">Chaque changement s'applique tout de suite, le verdict se met à jour en dessous.</p>
     <label class="mb-2 block text-sm" for="tripRange">Durée du trajet : <b>{{ tripMin }} min</b></label>
     <input id="tripRange" type="range" class="w-full accent-legere" min="5" :max="MAX_TRIP_MIN" step="5" :value="tripMin" @input="onTrip">
     <p v-if="tripHint" class="mt-1 text-[13px]" :class="tripHint.warn ? 'text-amber-500' : 'text-dim'">{{ tripHint.text }}</p>
@@ -102,5 +97,6 @@ function pickDest(r: GeoResult): void {
       </div>
       <p class="mt-1.5 text-[13px] text-dim">Ton agenda te préviendra {{ REMINDER_LEAD_MIN }} min avant, du lundi au vendredi, et un tap ouvrira la météo de {{ label }}.</p>
     </details>
+    <button type="button" class="mt-4 w-full cursor-pointer rounded-[10px] border border-legere/60 bg-panel2 px-3 py-3 text-[15px] font-semibold text-ink active:bg-line" @click="emit('close')">C'est bon</button>
   </section>
 </template>

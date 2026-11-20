@@ -57,13 +57,13 @@ const updatedText = computed(() => fetchedAt.value === null
       <ul class="mt-2 list-disc pl-5">
         <li>La pluie de la dernière heure au radar, puis la prévision minute par minute (Météo-France pluie dans l'heure, PIAF et AROME), puis la prévision Météo-France heure par heure (Open-Meteo hors de France).</li>
         <li>Neige et verglas, à titre d'information : vigilance Météo-France du département, et neige ou risque de verglas annoncés par Météo-France pour les deux prochaines heures.</li>
-        <li>Les deux prochaines heures en cases de cinq minutes, puis la suite de la journée heure par heure.</li>
+        <li>Les deux prochaines heures en cases de cinq minutes, puis la suite de la journée heure par heure, à partir de maintenant ou de l'heure de départ choisie en touchant "Départ maintenant" au bas du verdict.</li>
         <li>Avec une arrivée dans les réglages, la pluie est lue tout le long du trajet, en ligne droite, à l'heure où tu passes à chaque endroit (précision d'environ 2 km).</li>
         <li>France métropolitaine et pays voisins, choix de la ville, géolocalisation ou épingle posée sur la carte, installable comme une application sur le téléphone.</li>
       </ul>
     </details>
   </main>
-  <footer class="mx-auto flex max-w-[640px] flex-wrap justify-center gap-x-3 gap-y-1 px-3.5 pb-7 text-[11px] leading-4 text-dim desk:max-w-[860px]">
+  <footer class="mx-auto flex max-w-[640px] flex-wrap items-center justify-center gap-x-3 px-3.5 pb-7 text-[11px] leading-4 text-dim desk:max-w-[860px] [&_a]:inline-block [&_a]:py-1">
     <span><a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener" title="Pluie dans l'heure, prévision, vigilance, PIAF et AROME-PI">Météo-France</a>
       (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>)</span>
     <a class="underline" href="https://adresse.data.gouv.fr/" target="_blank" rel="noopener" title="Recherche de communes">Base Adresse Nationale</a>

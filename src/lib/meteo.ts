@@ -275,6 +275,30 @@ export function fmtDayHM(tMs: number, nowMs: number): string {
   return d ? d + ' ' + fmtHM(tMs) : fmtHM(tMs)
 }
 
+export function zonedTimeMs(year: number, month: number, day: number, h: number, m: number): number {
+  let t = Date.UTC(year, month - 1, day, h, m)
+  for (let i = 0; i < 2; i++) {
+    const p = clockParts(t)
+    t += Date.UTC(year, month - 1, day, h, m) - Date.UTC(p.year, p.month - 1, p.day, p.h, p.m)
+  }
+  return t
+}
+
+export function departureMs(hhmm: string, nowMs: number): number | null {
+  const mt = /^(\d{2}):(\d{2})$/.exec(hhmm)
+  if (!mt) return null
+  const h = Number(mt[1])
+  const m = Number(mt[2])
+  if (h > 23 || m > 59) return null
+  const n = clockParts(nowMs)
+  let t = zonedTimeMs(n.year, n.month, n.day, h, m)
+  if (t <= nowMs) {
+    const next = new Date(Date.UTC(n.year, n.month - 1, n.day + 1))
+    t = zonedTimeMs(next.getUTCFullYear(), next.getUTCMonth() + 1, next.getUTCDate(), h, m)
+  }
+  return t
+}
+
 export function spanAt<T extends { start: number; end: number }>(list: T[], tMs: number): T | null {
   let lo = 0
   let hi = list.length - 1
@@ -339,17 +363,17 @@ export const FREEZING_STRONG_PCT = 60
 const WINTER_RANK: Record<WinterInfo['kind'], number> = { risque: 1, neige: 2, verglacant: 3 }
 const VIGILANCE_WORDS = ['', 'verte', 'jaune', 'orange', 'rouge']
 
-export function winterAt(fc: MfForecast, nowMs: number): WinterInfo | null {
-  const endMs = timelineEndMs(nowMs)
-  const hours = fc.hours.filter((h) => h.end > nowMs && h.start < endMs)
-  const info = (h: MfHour, kind: WinterInfo['kind']): WinterInfo => ({ kind, time: h.start, now: h.start <= nowMs, pct: 0 })
+export function winterAt(fc: MfForecast, fromMs: number): WinterInfo | null {
+  const endMs = timelineEndMs(fromMs)
+  const hours = fc.hours.filter((h) => h.end > fromMs && h.start < endMs)
+  const info = (h: MfHour, kind: WinterInfo['kind']): WinterInfo => ({ kind, time: Math.max(h.start, fromMs), now: h.start <= fromMs, pct: 0 })
   const ice = hours.find((h) => h.desc.toLowerCase().includes('vergla'))
   if (ice) return info(ice, 'verglacant')
   const snow = hours.find((h) => h.snowCm > 0 || h.desc.toLowerCase().includes('neige'))
   if (snow) return info(snow, 'neige')
   let worst: MfHazard | null = null
   for (const hz of fc.hazards) {
-    if (hz.end > nowMs && hz.start < endMs && (!worst || hz.freezingPct > worst.freezingPct)) worst = hz
+    if (hz.end > fromMs && hz.start < endMs && (!worst || hz.freezingPct > worst.freezingPct)) worst = hz
   }
   if (worst && worst.freezingPct >= FREEZING_MIN_PCT) return { kind: 'risque', time: worst.start, now: true, pct: worst.freezingPct }
   return null
@@ -367,13 +391,13 @@ export function fmtWinter(w: WinterInfo, nowMs: number, where = ''): InfoText {
     return { text: 'Risque de verglas' + where + ' ' + Math.round(w.pct) + ' % (Météo-France).', strong: w.pct >= FREEZING_STRONG_PCT }
   }
   const word = w.kind === 'verglacant' ? 'Pluie verglaçante' : 'Neige'
-  const when = w.now ? ' en ce moment' : ' vers ' + fmtDayHM(w.time, nowMs)
+  const when = w.now && w.time <= nowMs + STEP_5MIN_MS ? ' en ce moment' : ' vers ' + fmtDayHM(w.time, nowMs)
   return { text: word + where + when + '.', strong: w.kind === 'verglacant' }
 }
 
-export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: boolean, nowMs: number): InfoText | null {
-  const wa = a ? winterAt(a, nowMs) : null
-  const wb = hasDest && b ? winterAt(b, nowMs) : null
+export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: boolean, fromMs: number, nowMs = fromMs): InfoText | null {
+  const wa = a ? winterAt(a, fromMs) : null
+  const wb = hasDest && b ? winterAt(b, fromMs) : null
   if (wa && wb) {
     return worseWinter(wa, wb)
       ? fmtWinter(wb, nowMs, ' à l\'arrivée')
@@ -487,6 +511,12 @@ export interface WindowMax {
   time: number
 }
 
+// le premier pas MF demarre au prochain multiple de 5 min : il compte pour le depart
+function startStepMm(trip: Trip, fromMs: number, endMs: number): number | null {
+  const t = next5min(fromMs)
+  return t < endMs ? mmAtTrip(trip, 0, t) : null
+}
+
 function maxMmWindow(trip: Trip, startMs: number, durMin: number): WindowMax | null {
   const n = Math.max(1, Math.round(durMin / 5))
   const endMs = startMs + durMin * 60000
@@ -498,6 +528,8 @@ function maxMmWindow(trip: Trip, startMs: number, durMin: number): WindowMax | n
     if (mm === null) return null
     if (!best || mm > best.mm) best = { mm, pos, time: k < n ? t : endMs }
   }
+  const start = startStepMm(trip, startMs, endMs)
+  if (start !== null && best && start > best.mm) best = { mm: start, pos: 0, time: next5min(startMs) }
   return best
 }
 
@@ -538,6 +570,10 @@ function firstWetOnTrip(trip: Trip, fromMs: number, durMin: number): WindowMax |
     const pos = posIndex(trip, k, n)
     const mm = mmAtTrip(trip, pos, t)
     if (mm !== null && mm >= WET_MM) return { mm, pos, time: k === n ? endMs : t }
+    if (pos !== 0 && t === next5min(fromMs)) {
+      const start = mmAtTrip(trip, 0, t)
+      if (start !== null && start >= WET_MM) return { mm: start, pos: 0, time: t }
+    }
   }
   return null
 }
@@ -717,9 +753,14 @@ export function computeVerdict(
   tripMin: number,
   nowMs: number,
   fetchedAtMs: number | null,
+  departMs = nowMs,
 ): VerdictView {
   const stale = fetchedAtMs !== null && nowMs - fetchedAtMs > STALE_MS
-  if (slotsEndMs(trip.slots[0]) <= nowMs || stale) {
+  const departNow = departMs < nowMs + STEP_5MIN_MS
+  if (slotsEndMs(trip.slots[0]) <= departMs || stale) {
+    if (!stale && !departNow && slotsEndMs(trip.slots[0]) > nowMs) {
+      return { state: 'inconnu', big: '?', sub: 'Pas de prévision si loin', detail: 'Choisis un départ plus proche.' }
+    }
     return {
       state: 'inconnu',
       big: '?',
@@ -733,9 +774,9 @@ export function computeVerdict(
   // Le premier pas MF demarre au prochain multiple de 5 min, d'ou la tolerance en amont
   const mf = trip.mf[0]
   const mfCoversNow = !!mf && mf.length > 0
-    && nowMs >= mf[0].start - 2 * STEP_5MIN_MS && nowMs < mf[mf.length - 1].end
-  const radarMm = mfCoversNow ? null : radarNowMm(trip.samples)
-  const tripW = maxMmWindow(trip, nowMs, tripMin)
+    && departMs >= mf[0].start - 2 * STEP_5MIN_MS && departMs < mf[mf.length - 1].end
+  const radarMm = mfCoversNow || !departNow ? null : radarNowMm(trip.samples)
+  const tripW = maxMmWindow(trip, departMs, tripMin)
   if (tripW === null) {
     return {
       state: 'inconnu',
@@ -746,7 +787,7 @@ export function computeVerdict(
   }
   const tripMm = tripW.mm
   const worstMm = Math.max(tripMm, radarMm ?? 0)
-  const firstWet = trip.hasDest ? nextWetDepartureMs(trip, nowMs, tripMin) : firstWetMs(trip, nowMs)
+  const firstWet = trip.hasDest ? nextWetDepartureMs(trip, departMs, tripMin) : firstWetMs(trip, departMs)
   if (worstMm < WET_MM) {
     return {
       state: 'oui',
@@ -755,12 +796,13 @@ export function computeVerdict(
       detail: firstWet < 0 ? '' : 'Sec jusqu\'à ' + fmtDayHM(firstWet, nowMs) + ' environ.',
     }
   }
-  const nowMm = Math.max(mmAtTrip(trip, 0, nowMs) ?? 0, radarMm ?? 0)
+  const nowMm = Math.max(mmAtTrip(trip, 0, departMs) ?? 0, startStepMm(trip, departMs, departMs + tripMin * 60000) ?? 0, radarMm ?? 0)
   const rainingNow = nowMm >= WET_MM
-  const wet = firstWetOnTrip(trip, nowMs, tripMin)
+  const nowWord = departNow ? 'en ce moment' : 'au départ'
+  const wet = firstWetOnTrip(trip, departMs, tripMin)
   const wetT = wet ? wet.time : firstWet
   const where = wet ? whereWord(trip, wet.pos) : ''
-  const depMs = nextDryDepartureMs(trip, nowMs, tripMin)
+  const depMs = nextDryDepartureMs(trip, departMs, tripMin)
   const noDryWindow = 'Pas de fenêtre sèche trouvée d\'ici ' + fmtDayHM(endsEndMs(trip), nowMs) + ' (fin des prévisions).'
   // bruine ou pluie faible seulement sur le trajet : ca se roule avec une veste, l'etat
   // PLUIE est reserve a la vraie pluie
@@ -772,7 +814,7 @@ export function computeVerdict(
       state: 'bof',
       big: 'OUI',
       sub: rainingNow || wetT < 0
-        ? word + ' en ce moment'
+        ? word + ' ' + nowWord
         : word + ' prévue vers ' + fmtDayHM(wetT, nowMs) + where,
       detail: radarOnly ? unforeseen
         : depMs < 0 ? noDryWindow : 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
@@ -787,7 +829,7 @@ export function computeVerdict(
     }
   }
   const sub = rainingNow || wetT < 0
-    ? 'En ce moment'
+    ? (departNow ? 'En ce moment' : 'Au départ')
     : 'Prévue vers ' + fmtDayHM(wetT, nowMs) + where
   if (depMs < 0) {
     return { state: 'pluie', big: 'PLUIE', sub, detail: noDryWindow }

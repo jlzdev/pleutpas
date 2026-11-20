@@ -6,6 +6,24 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.12.0] - 2026-11-20
+
+### Améliorations
+
+- Heure de départ au choix : "Départ maintenant" dans le pied du verdict ouvre le sélecteur d'heure du téléphone ; le verdict, la frise des deux heures et la suite de la journée se calent sur cette heure (aujourd'hui si elle est à venir, sinon demain), pour le retour du soir ou le départ de demain matin, avec une croix pour revenir à maintenant. Oubliée au prochain chargement.
+- Cartouche du verdict allégé : température, vent, hiver, vigilance et nuit forment un seul paragraphe, l'heure de départ et la durée du trajet partagent la ligne du pied, qui ne répète plus l'heure des données (affichée sous les cartes).
+- Réglages : plus de croix en haut (elle se lisait "annuler"), une phrase rappelle que chaque changement s'applique tout de suite et un bouton "C'est bon" ferme la carte.
+- Nuit indiquée sous le verdict : "Nuit jusqu'à 7h45." quand il fait nuit au départ, "Nuit à partir de 17h34." quand elle tombe pendant le trajet ou dans l'heure qui suit (lever et coucher du soleil calculés sur l'appareil, sans appel réseau).
+- Accessibilité : curseur de la carte libellé et lu avec son instant, boutons de zoom en français, liens du pied de page agrandis à 24 px, frise des deux heures décrite aux lecteurs d'écran par sa phrase. Audit axe (WCAG 2.2 AA) sans violation sur l'accueil et la page principale.
+
+### Corrections
+
+- Quand la pluie commence au premier pas de "pluie dans l'heure" (au prochain multiple de 5 min après le départ), le verdict dit "en ce moment" au lieu de "prévue vers 8h05", en mode point comme en mode trajet, et la frise des deux heures le voit aussi.
+
+### Développement
+
+- Tests automatisés (vitest, `npm test`, lancés par la CI) sur la logique du verdict, de la frise, de la journée, de l'hiver, des formats d'heure et du soleil.
+
 ## [1.11.0] - 2026-11-20
 
 ### Corrections

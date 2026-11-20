@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   cleanName,
   coordsName,
@@ -9,6 +9,7 @@ import {
   isMfPointUsable,
   MAX_TRIP_MIN,
   MIN_TRIP_MIN,
+  STEP_5MIN_MS,
   tripPositions,
   type FrameSample,
   type MfEntry,
@@ -115,6 +116,13 @@ export const futureRain = ref<FutureRain | null>(null)
 export const refreshing = ref(false)
 export const nowTick = ref(Date.now())
 export const recenterTick = ref(0)
+export const departAt = ref<number | null>(null)
+export const refMs = computed(() => (departAt.value !== null && departAt.value > nowTick.value ? departAt.value : nowTick.value))
+watch(nowTick, (t) => { if (departAt.value !== null && departAt.value < t + STEP_5MIN_MS) departAt.value = null })
+
+export function setDepartAt(ms: number | null): void {
+  departAt.value = ms !== null && ms >= Date.now() + STEP_5MIN_MS ? ms : null
+}
 
 export const slots = computed<Slot[]>(() => forecast.value?.rain ?? [])
 export const slotsDest = computed<Slot[]>(() => forecastDest.value?.rain ?? [])
@@ -327,6 +335,6 @@ declare global {
 }
 window.__pp = {
   place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
-  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone,
-  refresh, setPlace, setDest, swapPlaces, fetchWarning, isMfPointUsable, hourlyEndMs,
+  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs,
+  refresh, setPlace, setDest, swapPlaces, setDepartAt, fetchWarning, isMfPointUsable, hourlyEndMs,
 }
