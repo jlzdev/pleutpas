@@ -1,5 +1,5 @@
 import { onBeforeUnmount, ref } from 'vue'
-import { setPlace } from '../store'
+import { setDest, setPlace } from '../store'
 import { reverseGeocodeName } from './api'
 import { inFranceBounds } from './meteo'
 
@@ -25,21 +25,26 @@ export function locateError(e: unknown): string {
   return e instanceof Error ? e.message : 'Position introuvable pour le moment.'
 }
 
+export type LocateTarget = 'place' | 'dest'
+
 export function useLocate() {
   const locating = ref(false)
+  const target = ref<LocateTarget | null>(null)
   const message = ref('')
   let seq = 0
 
   function cancel(): void {
     seq++
     locating.value = false
+    target.value = null
     message.value = ''
   }
 
-  async function locateMe(): Promise<void> {
+  async function locateMe(to: LocateTarget = 'place'): Promise<void> {
     if (locating.value) return
     const mine = ++seq
     locating.value = true
+    target.value = to
     message.value = 'Localisation...'
     try {
       const pos = await getPosition()
@@ -48,15 +53,19 @@ export function useLocate() {
       const name = await reverseGeocodeName(lat, lon)
       if (mine !== seq) return
       locating.value = false
+      target.value = null
       message.value = ''
-      setPlace({ name: name ?? 'Ma position', lat, lon })
+      const found = { name: name ?? 'Ma position', lat, lon }
+      if (to === 'dest') setDest(found)
+      else setPlace(found)
     } catch (e) {
       if (mine !== seq) return
       locating.value = false
+      target.value = null
       message.value = locateError(e)
     }
   }
 
   onBeforeUnmount(cancel)
-  return { locating, message, locateMe, cancel }
+  return { locating, target, message, locateMe, cancel }
 }

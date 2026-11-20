@@ -10,7 +10,7 @@ import PlaceSearch from './PlaceSearch.vue'
 const props = defineProps<{ place: Place }>()
 const emit = defineEmits<{ close: [] }>()
 
-const { locating, message: geoMessage, locateMe, cancel } = useLocate()
+const { locating, target: locTarget, message: geoMessage, locateMe, cancel } = useLocate()
 
 const SHORT_TRIP_KM = 4
 const THEMES: { value: Theme; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Clair' }, { value: 'dark', label: 'Sombre' }]
@@ -64,6 +64,10 @@ function shareSaved(s: SavedTrip): Promise<void> {
   return shareTrip(s.place, s.dest, s.name)
 }
 
+const depSearch = ref<InstanceType<typeof PlaceSearch> | null>(null)
+const arrSearch = ref<InstanceType<typeof PlaceSearch> | null>(null)
+watch(() => props.place, () => depSearch.value?.sync())
+watch(dest, () => arrSearch.value?.sync())
 const depEmpty = ref(false)
 const arrEmpty = ref(false)
 const fieldsFilled = computed(() => !depEmpty.value && (!dest.value || !arrEmpty.value))
@@ -115,25 +119,16 @@ function pickDest(r: GeoResult): void {
         <circle cx="12" cy="55" r="1.5" fill="currentColor" class="text-dim"/>
         <path class="text-accent" fill="currentColor" d="M12 65c-4.4 0-8 3.4-8 7.8C4 78.7 12 88 12 88s8-9.3 8-15.2c0-4.4-3.6-7.8-8-7.8zm0 10.6a2.8 2.8 0 1 1 0-5.6 2.8 2.8 0 0 1 0 5.6z"/>
       </svg>
-      <PlaceSearch id="placeInput" :near="place" :current="place.name" label="Point de départ" placeholder="Point de départ" @pick="pickPlace" @empty="depEmpty = $event" />
+      <PlaceSearch id="placeInput" ref="depSearch" :near="place" :current="place.name" label="Point de départ" placeholder="Point de départ" :locate="geolocSupported" :locating="locating && locTarget === 'place'" @pick="pickPlace" @empty="depEmpty = $event" @locate="locateMe('place')" />
       <button
         type="button" class="iconbtn row-span-2 self-center" :class="dest ? '' : 'invisible'"
         aria-label="Inverser le sens du trajet" title="Inverser le sens du trajet" @click="swapPlaces"
       >
         <svg class="h-5 w-5" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M7 3 3 7h3v10h2V7h3L7 3zm10 18 4-4h-3V7h-2v10h-3l4 4z"/></svg>
       </button>
-      <PlaceSearch id="destInput" :near="place" :current="dest ? dest.name : ''" label="Arrivée" placeholder="Arrivée (facultatif)" :clearable="dest !== null" @pick="pickDest" @clear="setDest(null)" @empty="arrEmpty = $event" />
+      <PlaceSearch id="destInput" ref="arrSearch" :near="place" :current="dest ? dest.name : ''" label="Arrivée" placeholder="Arrivée (facultatif)" :clearable="dest !== null" :locate="geolocSupported" :locating="locating && locTarget === 'dest'" @pick="pickDest" @clear="setDest(null)" @empty="arrEmpty = $event" @locate="locateMe('dest')" />
     </div>
     <div class="mt-2.5 flex flex-wrap items-center gap-2">
-      <button
-        v-if="geolocSupported" type="button"
-        class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line bg-panel2 px-3 py-1.5 text-[13px] font-semibold text-ink active:bg-line disabled:cursor-wait"
-        :disabled="locating" aria-label="Partir de ma position" title="Partir de ma position" @click="locateMe"
-      >
-        <span v-if="locating" class="block h-4 w-4 animate-spin rounded-full border-2 border-line border-t-ink"></span>
-        <svg v-else class="h-4 w-4 text-accent" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>
-        Ma position
-      </button>
       <button
         v-if="fieldsFilled" type="button"
         class="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line bg-panel2 px-3 py-1.5 text-[13px] font-semibold text-ink active:bg-line disabled:cursor-default disabled:opacity-60"

@@ -6,6 +6,17 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.14.1] - 2026-11-20
+
+### Améliorations
+
+- Réglages : un lieu choisi s'affiche en texte fixe dans sa case (nom en gras), un appui dessus rouvre la saisie avec le texte sélectionné, la croix retire l'arrivée ou vide le départ pour en saisir un autre.
+- Réglages : "Ma position" est désormais la première suggestion du champ sur lequel on tape, départ ou arrivée, à la place de la puce qui ne s'appliquait qu'au départ.
+
+### Corrections
+
+- Réglages : après avoir vidé le champ Départ avec la croix, "Ma position" (ou le choix du même lieu) remplit de nouveau le champ.
+
 ## [1.14.0] - 2026-11-20
 
 ### Améliorations
