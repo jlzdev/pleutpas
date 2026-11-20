@@ -6,6 +6,17 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.11.0] - 2026-11-20
+
+### Corrections
+
+- Plus de fond blanc avant l'application du style au chargement (fond sombre posé directement dans la page).
+- Suite de la journée : le changement de jour n'est plus marqué par un trait vertical (pris pour un curseur) mais seulement par le nom du jour en gras sur l'axe, "demain" ou le jour de la semaine selon l'heure de consultation ; et quand le graphique commence déjà le lendemain (consultation après 22 h), le premier repère l'indique ("demain 1h").
+
+### Améliorations
+
+- Accueil (premier lancement) : présentation en trois points de ce que donne l'app (verdict, deux prochaines heures, carte animée), bouton de géolocalisation mis en avant, exemples de villes à essayer d'un appui (Paris, Strasbourg, Grenoble, Nantes, Bordeaux) et rappel que le lieu reste sur l'appareil.
+
 ## [1.10.0] - 2026-11-14
 
 ### Corrections

@@ -21,6 +21,7 @@ const SHOWER_PCT = 40
 const DRY_CELL = 'var(--color-line)'
 const GREY = '#8fa1b8'
 const HATCH_MIX = 25
+const END_FROM = 20
 const deskQuery = window.matchMedia('(min-width: 900px)')
 const desk = ref(deskQuery.matches)
 const onDesk = (e: MediaQueryListEvent) => { desk.value = e.matches }
@@ -79,29 +80,33 @@ const labels = computed(() => {
 })
 
 const dry = computed(() => cells.value.every(c => c.kind === 'sec'))
-const midnightIdx = computed(() => day.value.findIndex(c => clockParts(c.start).h === 0))
-
 const markers = computed(() => {
   const cs = day.value
-  const minAfterFirst = desk.value ? 2 : 3
-  const out: { i: number; label: string; bold: boolean; midnight: boolean }[] = []
+  const now = nowTick.value
+  const out: { i: number; label: string; bold: boolean; midnight: boolean; end: boolean }[] = []
+  let minAfterFirst = desk.value ? 2 : 3
   cs.forEach((c, i) => {
     const h = clockParts(c.start).h
     const midnight = h === 0
+    const dayWord = fmtDay(c.start, now)
     if (i === 0) {
-      out.push({ i, label: midnight ? 'demain' : h + 'h', bold: true, midnight })
+      const label = midnight ? dayWord || '0h' : fmtDayHM(c.start, now)
+      if (label.includes(' ')) minAfterFirst += 3
+      out.push({ i, label, bold: true, midnight, end: false })
       return
     }
     if (h % 3 !== 0 || i < minAfterFirst) return
     if (midnight) {
-      const prev = out[out.length - 1]
-      if (prev && !prev.bold && i - prev.i < 3) out.pop()
-      out.push({ i, label: 'demain', bold: true, midnight: true })
+      const end = i >= END_FROM
+      const label = dayWord || '0h'
+      const room = end && !desk.value ? Math.ceil(label.length / 2) + 3 : 3
+      while (out.length && !out[out.length - 1].bold && i - out[out.length - 1].i < room) out.pop()
+      out.push({ i, label, bold: true, midnight: true, end })
       return
     }
     const prev = out[out.length - 1]
     if (!desk.value && prev?.midnight && i - prev.i <= 3) return
-    out.push({ i, label: h + 'h', bold: false, midnight: false })
+    out.push({ i, label: h + 'h', bold: false, midnight: false, end: false })
   })
   return out
 })
@@ -150,14 +155,10 @@ const note = computed(() => {
       </div>
       <div class="relative mt-1 h-4">
         <span
-          v-if="midnightIdx > 0" class="absolute bottom-0 w-[2px] bg-dim" :class="dry ? '-top-[15px]' : '-top-[35px] desk:-top-[43px]'"
-          :style="{ left: 'calc(' + leftOf(midnightIdx) + ' - 1px)' }"
-        ></span>
-        <span
           v-for="m in markers" :key="m.i"
           class="absolute top-0.5 whitespace-nowrap text-[11px] leading-[14px]"
-          :class="[m.bold ? 'font-bold text-ink' : 'text-dim', m.midnight && m.i > 0 ? 'pl-1' : '']"
-          :style="{ left: leftOf(m.i) }"
+          :class="m.bold ? 'font-bold text-ink' : 'text-dim'"
+          :style="m.end ? { right: (100 - (m.i / 24) * 100) + '%' } : { left: leftOf(m.i) }"
         >{{ m.label }}</span>
       </div>
     </template>
