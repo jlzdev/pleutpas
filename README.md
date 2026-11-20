@@ -35,10 +35,9 @@ Trois familles de sources, par ordre d'autorité sur le verdict :
    15 min) reste la source hors de France et le repli silencieux si Météo-France ne répond
    pas ; les composants lisent une prévision point unifiée sans connaître la source.
 
-À titre d'information, sans effet sur le verdict : la vigilance neige-verglas du département
-et la neige, la pluie verglaçante ou le risque de verglas des deux prochaines heures, lus sur
-la prévision et la vigilance Météo-France (endpoints de l'application mobile, comme la pluie
-dans l'heure, France seulement).
+À titre d'information, sans effet sur le verdict : la neige, la pluie verglaçante ou le
+risque de verglas des deux prochaines heures, lus sur la prévision Météo-France (endpoint de
+l'application mobile, comme la pluie dans l'heure, France seulement).
 
 Avec une arrivée, le trajet est une ligne droite échantillonnée dans l'espace et le temps
 (25 positions, une image par instant de passage) : Météo-France "pluie dans l'heure" aux deux
@@ -56,8 +55,7 @@ la Géoplateforme, la commune de l'API Découpage administratif (geo.api.gouv.fr
 de Photon hors de France.
 
 Le site est une PWA installable (bandeau "Ajoute Pleut pas ? à ton écran d'accueil" à la
-première visite) et propose un rappel quotidien sous forme de fichier .ics à ajouter à son
-agenda, sans serveur ni notification push.
+première visite), sans serveur ni notification push.
 
 ## Architecture
 

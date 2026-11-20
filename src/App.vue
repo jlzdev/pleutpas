@@ -60,16 +60,16 @@ const updatedText = computed(() => fetchedAt.value === null
       </button>
     </template>
   </header>
-  <nav v-if="place && saved.length" aria-label="Trajets enregistrés" class="mx-auto flex max-w-[640px] gap-2 overflow-x-auto px-3.5 pb-1 pt-1.5 [scrollbar-width:none] desk:max-w-[860px]">
-    <button
-      v-for="(s, i) in saved" :key="s.name + i" type="button"
-      class="flex-none cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold"
-      :class="i === savedIndex ? 'border-accent bg-panel2 text-ink' : 'border-line bg-panel text-dim active:bg-panel2'"
-      :aria-pressed="i === savedIndex" @click="applySaved(i)"
-    >{{ s.name }}</button>
-  </nav>
   <main class="mx-auto flex max-w-[640px] flex-col gap-3.5 px-3.5 pb-6 pt-2.5 desk:max-w-[860px]">
     <SettingsCard v-if="place" v-show="settingsOpen" :place="place" @close="settingsOpen = false" />
+    <nav v-if="place && saved.length" aria-label="Trajets enregistrés" class="-my-1 flex gap-2 overflow-x-auto py-1 [scrollbar-width:none]">
+      <button
+        v-for="(s, i) in saved" :key="s.name + i" type="button"
+        class="flex-none cursor-pointer whitespace-nowrap rounded-full border px-3 py-1.5 text-sm font-semibold"
+        :class="i === savedIndex ? 'border-accent bg-panel2 text-ink' : 'border-line bg-panel text-dim active:bg-panel2'"
+        :aria-pressed="i === savedIndex" @click="applySaved(i)"
+      >{{ s.name }}</button>
+    </nav>
     <template v-if="place">
       <VerdictCard :place="place" />
       <TimelineCard />
@@ -86,7 +86,7 @@ const updatedText = computed(() => fetchedAt.value === null
       <p class="mt-2.5">Pleut pas ? répond à une question simple : partir maintenant, ou plutôt à quelle heure ? Le verdict, OUI ou PLUIE, dépend de la pluie attendue sur la durée de ton trajet.</p>
       <ul class="mt-2 list-disc pl-5">
         <li>La pluie de la dernière heure au radar, puis la prévision minute par minute (Météo-France pluie dans l'heure, PIAF et AROME), puis la prévision Météo-France heure par heure (Open-Meteo hors de France).</li>
-        <li>À titre d'information sous le verdict : vigilance Météo-France du département (vent violent, orages, pluie-inondation, neige-verglas), neige ou risque de verglas annoncés pour les deux prochaines heures, et heure de la nuit.</li>
+        <li>À titre d'information sous le verdict : neige ou risque de verglas annoncés par Météo-France pour les deux prochaines heures, et heure de la nuit.</li>
         <li>Les deux prochaines heures en cases de cinq minutes, puis la suite de la journée heure par heure, à partir de maintenant ou de l'heure de départ choisie en touchant "Départ maintenant" au bas du verdict.</li>
         <li>Avec une arrivée dans les réglages, la pluie est lue tout le long du trajet, en ligne droite, à l'heure où tu passes à chaque endroit (précision d'environ 2 km).</li>
         <li>France métropolitaine et pays voisins, choix de la ville, géolocalisation ou épingle posée sur la carte, trajets enregistrés rappelés d'un appui, installable comme une application sur le téléphone.</li>
@@ -98,7 +98,7 @@ const updatedText = computed(() => fetchedAt.value === null
     <InstallBanner />
   </div>
   <footer class="mx-auto flex max-w-[640px] flex-wrap items-center justify-center gap-x-3 px-3.5 pb-7 text-[11px] leading-4 text-dim desk:max-w-[860px] [&_a]:inline-block [&_a]:py-1">
-    <span><a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener" title="Pluie dans l'heure, prévision, vigilance, PIAF et AROME-PI">Météo-France</a>
+    <span><a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener" title="Pluie dans l'heure, prévision, PIAF et AROME-PI">Météo-France</a>
       (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>)</span>
     <a class="underline" href="https://adresse.data.gouv.fr/" target="_blank" rel="noopener" title="Recherche de communes">Base Adresse Nationale</a>
     <a class="underline" href="https://geo.api.gouv.fr/decoupage-administratif" target="_blank" rel="noopener" title="Commune d'un point">geo.api.gouv.fr</a>

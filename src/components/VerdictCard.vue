@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { departAt, dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, radarPending, refMs, refreshing, setDepartAt, trip, tripMin, vigilance } from '../store'
-import { bearingDeg, clockParts, computeVerdict, conditionsAt, departureMs, fmtConditions, fmtDayHM, fmtVigilance, routeLabel, winterNote, type InfoText, type Place, type VerdictView } from '../lib/meteo'
+import { departAt, dest, fetchedAt, forecast, forecastMF, forecastMFDest, frameSamples, nowTick, radarPending, refMs, refreshing, setDepartAt, trip, tripMin } from '../store'
+import { bearingDeg, clockParts, computeVerdict, conditionsAt, departureMs, fmtConditions, fmtDayHM, routeLabel, winterNote, type InfoText, type Place, type VerdictView } from '../lib/meteo'
 import { sunNote } from '../lib/sun'
 
 const props = defineProps<{ place: Place }>()
@@ -31,8 +31,6 @@ const notes = computed<InfoText[]>(() => {
   const out: InfoText[] = []
   const winter = winterNote(forecastMF.value, forecastMFDest.value, dest.value !== null, refMs.value, nowTick.value)
   if (winter) out.push(winter)
-  const v = fmtVigilance(vigilance.value)
-  if (v) out.push(v)
   const sun = sunNote(props.place, refMs.value, tripMin.value, nowTick.value)
   if (sun) out.push(sun)
   return out

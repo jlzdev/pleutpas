@@ -1,7 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import {
   bearingDeg, cleanName, clockParts, computeVerdict, coordsName, dayCells, departureMs, displayZone, distanceKm,
-  estimatedTripMin, fmtConditions, fmtDay, fmtDayHM, fmtHM, fmtMinutes, fmtMm, fmtVigilance, fmtWinter, hourlyEndMs,
+  estimatedTripMin, fmtConditions, fmtDay, fmtDayHM, fmtHM, fmtMinutes, fmtMm, fmtWinter, hourlyEndMs,
   inFranceBounds, intensityColor, intensityWord, isMfPointUsable, mfLevelMm, nextWetSlotMs, placeTown, radarNowMm,
   relativeWindWord, routeLabel, routeLabels, spanAt, STEP_5MIN_MS, timelineCells, timelineEndMs, tripPositions, windWord,
   winterAt, winterNote, zonedTimeMs, HOUR_MS,
@@ -283,7 +283,7 @@ describe('suite de la journée', () => {
   })
 })
 
-describe('hiver et vigilance', () => {
+describe('hiver', () => {
   const hour = (startMin: number, desc: string, snowCm = 0) => ({ start: T8 + startMin * MIN, end: T8 + (startMin + 60) * MIN, snowCm, desc })
   const fc = (hours: ReturnType<typeof hour>[], hazards: { start: number; end: number; freezingPct: number }[] = []): MfForecast =>
     ({ dept: '25', country: 'FR', hours, hazards, point: pointForecast(slotsWith()) })
@@ -310,17 +310,6 @@ describe('hiver et vigilance', () => {
     expect(winterNote(a, b, false, NOW)?.text).toBe('Neige en ce moment.')
     expect(winterNote(a, null, true, NOW)?.text).toBe('Neige au départ en ce moment.')
     expect(winterNote(null, null, true, NOW)).toBeNull()
-  })
-  it('vigilance par phénomène, la plus sévère en premier', () => {
-    expect(fmtVigilance(null)).toBeNull()
-    expect(fmtVigilance({ today: { '5': 1 }, tomorrow: { '5': 1 } })).toBeNull()
-    expect(fmtVigilance({ today: { '5': 2 }, tomorrow: {} })).toEqual({ text: 'Vigilance jaune neige-verglas.', strong: false })
-    expect(fmtVigilance({ today: { '5': 3 }, tomorrow: { '5': 2 } })).toEqual({ text: 'Vigilance orange neige-verglas.', strong: true })
-    expect(fmtVigilance({ today: { '5': 2 }, tomorrow: { '5': 3 } })).toEqual({ text: 'Vigilance jaune neige-verglas, demain orange neige-verglas.', strong: true })
-    expect(fmtVigilance({ today: { '5': 1 }, tomorrow: { '5': 4 } })).toEqual({ text: 'Vigilance demain rouge neige-verglas.', strong: true })
-    expect(fmtVigilance({ today: { '1': 2, '3': 3, '9': 4 }, tomorrow: { '2': 2 } })).toEqual({ text: 'Vigilance orange orages, jaune vent violent, demain jaune pluie-inondation.', strong: true })
-    expect(fmtVigilance({ today: { '2': 2 }, tomorrow: { '1': 2 } })?.text).toBe('Vigilance jaune pluie-inondation, demain jaune vent violent.')
-    expect(fmtVigilance({ today: { '1': 2, '3': 3 }, tomorrow: { '1': 3, '3': 3 } })?.text).toBe('Vigilance orange orages, jaune vent violent, demain orange vent violent.')
   })
 })
 

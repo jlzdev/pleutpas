@@ -19,15 +19,11 @@ import {
   type PointForecast,
   type Slot,
   type Trip,
-  type Vigilance,
 } from './lib/meteo'
-import { parseHHMM } from './lib/ics'
 import {
   fetchForecastMF,
   fetchFutureRain,
   fetchRain,
-  fetchVigilance,
-  fetchWarning,
   fetchWeather,
   forgetFrameImages,
   loadFrameImage,
@@ -39,7 +35,6 @@ const KEY_TRIP = 'pleutpas.tripMin'
 const KEY_PLACE = 'pleutpas.place'
 const KEY_DEST = 'pleutpas.dest'
 const KEY_CACHE = 'pleutpas.cache'
-const KEY_REMINDER = 'pleutpas.reminderTime'
 const KEY_SAVED = 'pleutpas.saved'
 export const MAX_SAVED = 6
 const FORECAST_TTL_MS = 15 * 60 * 1000
@@ -136,7 +131,6 @@ export const place = ref<Place | null>(initialPlace)
 export const dest = ref<Place | null>(initialDest)
 export const tripMin = ref(loadTrip())
 export const saved = ref<SavedTrip[]>(loadSaved())
-export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? lsGet(KEY_REMINDER) as string : '08:00')
 export const forecast = ref<PointForecast | null>(null)
 export const forecastDest = ref<PointForecast | null>(null)
 export const fetchedAt = ref<number | null>(null)
@@ -144,7 +138,6 @@ export const rainMF = ref<MfEntry[] | null>(null)
 export const rainMFDest = ref<MfEntry[] | null>(null)
 export const forecastMF = ref<MfForecast | null>(null)
 export const forecastMFDest = ref<MfForecast | null>(null)
-export const vigilance = ref<Vigilance | null>(null)
 export const forecastAt = ref<number | null>(null)
 let forecastKey = ''
 export const frameSamples = ref<FrameSample[] | null>(null)
@@ -238,7 +231,6 @@ export async function refresh(fromButton = false): Promise<void> {
   const key = cacheKey(p, d)
   const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
   const complete = !!forecast.value && (!d || !!forecastDest.value)
-    && (vigilance.value !== null || !(forecastMF.value?.dept || forecastMFDest.value?.dept))
   if (!fromButton && complete && forecastKey === key && forecastAt.value !== null && now - forecastAt.value < FORECAST_TTL_MS) {
     const [r, rd] = await Promise.allSettled([fetchRain(p), d ? fetchRain(d) : Promise.resolve(null)])
     if (seq !== refreshSeq) return
@@ -296,8 +288,6 @@ export async function refresh(fromButton = false): Promise<void> {
   rainMFDest.value = rainDest?.entries ?? null
   forecastMF.value = fc
   forecastMFDest.value = fcDest
-  void fetchVigilance([fc?.dept ?? rain?.dept ?? null, d ? (fcDest?.dept ?? rainDest?.dept ?? null) : null])
-    .then((v) => { if (seq === refreshSeq) vigilance.value = v }, () => undefined)
   }
   const fut = await futP
   if (seq !== refreshSeq) return
@@ -319,7 +309,6 @@ function resetData(): void {
   frameSamples.value = null
   forecastMF.value = null
   forecastMFDest.value = null
-  vigilance.value = null
   forecastAt.value = null
   recenterTick.value++
   void refresh(false)
@@ -363,16 +352,13 @@ function persistSaved(): void {
   lsSet(KEY_SAVED, JSON.stringify(saved.value))
 }
 
-export const canSave = computed(() => savedIndex.value >= 0 || saved.value.length < MAX_SAVED)
+export const canSave = computed(() => savedIndex.value < 0 && saved.value.length < MAX_SAVED)
 
 export function saveCurrent(name: string): boolean {
   const p = place.value
   if (!p || !canSave.value) return false
   const entry: SavedTrip = { name: cleanName(name) || routeLabel(p, dest.value), place: p, dest: dest.value, tripMin: tripMin.value }
-  const list = [...saved.value]
-  if (savedIndex.value >= 0) list[savedIndex.value] = entry
-  else list.push(entry)
-  saved.value = list
+  saved.value = [...saved.value, entry]
   persistSaved()
   return true
 }
@@ -403,14 +389,9 @@ export function setTripMin(n: number): void {
   lsSet(KEY_TRIP, String(n))
 }
 
-export function setReminderTime(v: string): void {
-  if (!parseHHMM(v)) return
-  reminderTime.value = v
-  lsSet(KEY_REMINDER, v)
-}
-
 export function initStore(): void {
   lsRemove('pleutpas.basemap')
+  lsRemove('pleutpas.reminderTime')
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !place.value) return
     if (fetchedAt.value === null || Date.now() - fetchedAt.value > 5 * 60 * 1000) {
@@ -427,7 +408,7 @@ declare global {
   interface Window { __pp: Record<string, unknown> }
 }
 window.__pp = {
-  place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
+  place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest,
   frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs, forecastAt, saved, savedIndex, canSave,
-  refresh, setPlace, setDest, swapPlaces, setDepartAt, saveCurrent, applySaved, removeSaved, fetchWarning, isMfPointUsable, hourlyEndMs,
+  refresh, setPlace, setDest, swapPlaces, setDepartAt, saveCurrent, applySaved, removeSaved, isMfPointUsable, hourlyEndMs,
 }

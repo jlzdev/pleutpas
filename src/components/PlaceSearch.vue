@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { searchPlaces, type GeoNear, type GeoResult } from '../lib/api'
 
 const props = defineProps<{ id: string; near?: GeoNear; clearable?: boolean; current?: string; label?: string; placeholder?: string }>()
-const emit = defineEmits<{ pick: [r: GeoResult]; clear: [] }>()
+const emit = defineEmits<{ pick: [r: GeoResult]; clear: []; empty: [v: boolean] }>()
 
 const MIN_CHARS = 3
 const DEBOUNCE_MS = 300
@@ -58,6 +58,8 @@ watch(() => props.current ?? '', (v) => {
   query.value = v
 }, { immediate: true })
 
+watch(() => query.value.trim() === '', (v) => emit('empty', v), { immediate: true })
+
 function onEnter(): void {
   clearTimeout(timer)
   if (results.value.length) {
@@ -86,16 +88,20 @@ function resultLabel(r: GeoResult): string {
 
 function pick(r: GeoResult): void {
   onEscape()
-  query.value = ''
+  skipSearch = true
+  query.value = props.current !== undefined ? r.name : ''
   emit('pick', r)
 }
 
+const showsCurrent = computed(() => !!props.clearable && query.value === (props.current ?? ''))
+
 function onClear(): void {
-  if (query.value) {
+  if (query.value && !showsCurrent.value) {
     onEscape()
     query.value = ''
     return
   }
+  onEscape()
   emit('clear')
 }
 
@@ -119,7 +125,7 @@ onBeforeUnmount(() => {
       <button
         v-if="query || clearable" type="button"
         class="absolute inset-y-0 right-0 flex w-11 cursor-pointer items-center justify-center text-2xl leading-none text-ink"
-        :aria-label="query ? 'Effacer la saisie' : 'Retirer ce lieu'" @click="onClear"
+        :aria-label="query && !showsCurrent ? 'Effacer la saisie' : 'Retirer ce lieu'" @click="onClear"
       >✕</button>
     </div>
     <slot name="aside"></slot>

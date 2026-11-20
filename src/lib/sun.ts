@@ -58,6 +58,6 @@ export function sunNote(place: Place, departMs: number, tripMin: number, nowMs: 
   const d = daylightAt(place.lat, place.lon, departMs)
   if (!d) return null
   if (d.dark) return { text: 'Nuit jusqu\'à ' + fmtDayHM(d.next, nowMs) + '.', strong: false }
-  if (d.next <= departMs + tripMin * 60000 + SUNSET_AHEAD_MS) return { text: 'Nuit à partir de ' + fmtDayHM(d.next, nowMs) + '.', strong: false }
+  if (d.next <= departMs + tripMin * 60000 + SUNSET_AHEAD_MS) return { text: 'Nuit à ' + fmtDayHM(d.next, nowMs) + '.', strong: false }
   return null
 }

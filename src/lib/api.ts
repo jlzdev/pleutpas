@@ -12,9 +12,6 @@ import {
   type PointForecast,
   type ProbaSpan,
   type Slot,
-  type Vigilance,
-  type VigilanceLevels,
-  VIGILANCE_PHENOMENA,
 } from './meteo'
 
 interface OpenMeteoPayload {
@@ -257,40 +254,6 @@ export async function fetchForecastMF(place: Place, nowMs: number): Promise<MfFo
       proba: mfProba(probaList, nowMs),
     },
   }
-}
-
-// vigilance departementale de l'app mobile (meme webservice), couleur 1 vert a 4 rouge par
-// phenomene suivi (VIGILANCE_PHENOMENA), echeance J ou J1 (J1 servie des le bulletin du matin)
-export async function fetchWarning(dept: string, echeance: 'J' | 'J1'): Promise<VigilanceLevels> {
-  const res = await fetch('https://webservice.meteofrance.com/v3/warning/currentphenomenons?domain='
-    + encodeURIComponent(dept) + '&depth=1&echeance=' + echeance + '&token=' + MF_TOKEN)
-  if (!res.ok) throw new Error('meteofrance vigilance http ' + res.status)
-  const data = await res.json()
-  const list = (Array.isArray(data.phenomenons_max_colors) ? data.phenomenons_max_colors : []) as
-    { phenomenon_id?: unknown; phenomenon_max_color_id?: unknown }[]
-  const out: VigilanceLevels = {}
-  for (const x of list) {
-    const id = String(x.phenomenon_id)
-    const color = x.phenomenon_max_color_id
-    if (id in VIGILANCE_PHENOMENA && typeof color === 'number' && color >= 1 && color <= 4) out[id] = color
-  }
-  return out
-}
-
-export async function fetchVigilance(depts: (string | null)[]): Promise<Vigilance | null> {
-  const list = [...new Set(depts.filter((d): d is string => d !== null))]
-  if (!list.length) return null
-  const worst = async (echeance: 'J' | 'J1'): Promise<VigilanceLevels> => {
-    const rs = await Promise.allSettled(list.map((d) => fetchWarning(d, echeance)))
-    const m: VigilanceLevels = {}
-    for (const r of rs) {
-      if (r.status !== 'fulfilled') continue
-      for (const [id, color] of Object.entries(r.value)) if ((m[id] ?? 0) < color) m[id] = color
-    }
-    return m
-  }
-  const [today, tomorrow] = await Promise.all([worst('J'), worst('J1')])
-  return { today, tomorrow }
 }
 
 const DATA_BASE: string = import.meta.env.VITE_DATA_BASE || 'https://raw.githubusercontent.com/jlzdev/pleutpas/data'

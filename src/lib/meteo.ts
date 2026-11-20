@@ -65,17 +65,6 @@ export interface MfForecast {
   point: PointForecast
 }
 
-export const VIGILANCE_PHENOMENA: Record<string, string> = {
-  '1': 'vent violent', '2': 'pluie-inondation', '3': 'orages', '5': 'neige-verglas',
-}
-
-export type VigilanceLevels = Record<string, number>
-
-export interface Vigilance {
-  today: VigilanceLevels
-  tomorrow: VigilanceLevels
-}
-
 export interface InfoText {
   text: string
   strong: boolean
@@ -186,6 +175,11 @@ export function routeLabels(a: Place, b: Place | null): [string, string | null] 
 export function routeLabel(a: Place, b: Place | null): string {
   const [x, y] = routeLabels(a, b)
   return y ? x + ' vers ' + y : x
+}
+
+export function placeUrl(place: Place, dest: Place | null = null): string {
+  const base = 'https://pleutpas.fr/?lat=' + place.lat + '&lon=' + place.lon + '&nom=' + encodeURIComponent(place.name)
+  return dest ? base + '&alat=' + dest.lat + '&alon=' + dest.lon + '&anom=' + encodeURIComponent(dest.name) : base
 }
 
 export function coordsName(lat: number, lon: number): string {
@@ -367,7 +361,6 @@ export function fmtConditions(c: Conditions, headingDeg: number | null = null): 
 export const FREEZING_MIN_PCT = 30
 export const FREEZING_STRONG_PCT = 60
 const WINTER_RANK: Record<WinterInfo['kind'], number> = { risque: 1, neige: 2, verglacant: 3 }
-const VIGILANCE_WORDS = ['', 'verte', 'jaune', 'orange', 'rouge']
 
 export function winterAt(fc: MfForecast, fromMs: number): WinterInfo | null {
   const endMs = timelineEndMs(fromMs)
@@ -412,27 +405,6 @@ export function winterNote(a: MfForecast | null, b: MfForecast | null, hasDest: 
   if (wa) return fmtWinter(wa, nowMs, hasDest ? ' au départ' : '')
   if (wb) return fmtWinter(wb, nowMs, ' à l\'arrivée')
   return null
-}
-
-export function fmtVigilance(v: Vigilance | null): InfoText | null {
-  if (!v) return null
-  const level = (c: number | undefined) => (c !== undefined && c >= 2 ? c : 0)
-  const today: { rank: number; text: string }[] = []
-  const tomorrow: { rank: number; text: string }[] = []
-  for (const [id, name] of Object.entries(VIGILANCE_PHENOMENA)) {
-    const d0 = level(v.today[id])
-    const d1 = level(v.tomorrow[id])
-    if (d0) today.push({ rank: d0, text: VIGILANCE_WORDS[d0] + ' ' + name })
-    if (d1 > d0) tomorrow.push({ rank: d1, text: VIGILANCE_WORDS[d1] + ' ' + name })
-  }
-  if (!today.length && !tomorrow.length) return null
-  const byRank = (a: { rank: number }, b: { rank: number }) => b.rank - a.rank
-  const parts = [
-    ...today.sort(byRank).map((p) => p.text),
-    ...(tomorrow.length ? ['demain ' + tomorrow.sort(byRank).map((p) => p.text).join(', ')] : []),
-  ]
-  const worst = Math.max(...today.map((p) => p.rank), ...tomorrow.map((p) => p.rank))
-  return { text: 'Vigilance ' + parts.join(', ') + '.', strong: worst >= 3 }
 }
 
 export const MF_MIN_HOURLY_H = 12

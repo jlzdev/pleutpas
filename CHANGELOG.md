@@ -10,10 +10,16 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ### Améliorations
 
-- Trajets enregistrés : dans les réglages, "Enregistrer" garde le trajet affiché (départ, arrivée, durée) sous un nom au choix (ligne "Enregistrer le trajet"), six au plus, liste repliée dans "Mes trajets" (au-delà, retirer un trajet ; ré-enregistrer un trajet le met à jour à sa place) ; les trajets enregistrés se rappellent d'un appui dans une rangée de puces sous l'en-tête, et les deux premiers sont dans le menu de l'icône de l'app (appui long sur Android, liens ?fav=1 et ?fav=2).
-- Vigilance Météo-France étendue : vent violent, orages et pluie-inondation en plus de neige-verglas, dans une seule phrase sous le verdict, la plus sévère en premier, puis ce qui s'aggrave demain ("Vigilance orange orages, jaune vent violent, demain orange vent violent").
-- Thème clair affiné : champs de saisie blancs à bordure marquée, distincts des boutons, textes secondaires et titres plus foncés.
-- Partager ce lieu ou ce trajet : icône de partage dans les réglages, à côté du champ d'enregistrement et sur chaque trajet enregistré ; ouvre le partage du téléphone (ou copie le lien), le lien ouvre Pleut pas ? directement sur le trajet.
+- Trajets enregistrés : puce "Sauvegarder" à côté de "Ma position" dans les réglages, qui demande un nom et garde le trajet affiché (départ, arrivée, durée), six au plus ; la puce devient "Enregistré" quand le trajet affiché est déjà dans la liste et se cache tant qu'un champ de l'itinéraire est vide ; pour modifier un trajet, le retirer de "Mes trajets" et le sauvegarder à nouveau. Les trajets enregistrés se rappellent d'un appui dans une rangée de puces sous l'en-tête (sous les réglages quand ils sont ouverts), et les deux premiers sont dans le menu de l'icône de l'app (appui long sur Android, liens ?fav=1 et ?fav=2).
+- Partager un trajet enregistré : icône de partage sur chaque ligne de "Mes trajets", qui ouvre le partage du téléphone (ou copie le lien) ; le lien ouvre Pleut pas ? directement sur le trajet.
+- Réglages refaits sur le modèle d'un itinéraire : départ et arrivée empilés avec cercle, pointillés et épingle, bouton d'inversion à droite, puces "Ma position" et "Sauvegarder", durée du trajet, "Mes trajets" replié, affichage, "C'est bon". Les champs affichent le lieu en place et la croix de l'arrivée la retire en un appui.
+- Thème clair affiné : champs de saisie blancs à bordure marquée, distincts des boutons, textes secondaires et titres plus foncés. Pictos de partage, lecture, pause et inversion en icônes vectorielles centrées.
+- La note de nuit sous le verdict dit "Nuit à 17h34." au lieu de "Nuit à partir de 17h34."
+
+### Retraits
+
+- Le rappel dans l'agenda (fichier .ics) : pas utilisé, il prenait de la place dans les réglages.
+- La vigilance Météo-France du département (neige-verglas depuis la 1.6.0) n'est plus affichée sous le verdict : le vent fort est déjà signalé dans la ligne des conditions, et la neige ou le verglas annoncés restent indiqués.
 
 ## [1.13.0] - 2026-11-20
 
