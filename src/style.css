@@ -15,6 +15,34 @@
   --color-fort: #e05ce0;
   --color-tresfort: #ff5c47;
   --color-grele: #ffd23f;
+  --color-warn: #fcd34d;
+  --color-accent: #4aa8ff;
+  --color-on-accent: #0e1420;
+}
+
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+  --color-night: #eef2f7;
+  --color-panel: #ffffff;
+  --color-panel2: #f1f4f9;
+  --color-line: #d3dae5;
+  --color-dim: #4d5c71;
+  --color-ink: #101826;
+  --color-warn: #b45309;
+  --color-accent: #1d6ef2;
+  --color-on-accent: #ffffff;
+  }
+}
+:root[data-theme="light"] {
+  --color-night: #eef2f7;
+  --color-panel: #ffffff;
+  --color-panel2: #f1f4f9;
+  --color-line: #d3dae5;
+  --color-dim: #4d5c71;
+  --color-ink: #101826;
+  --color-warn: #b45309;
+  --color-accent: #1d6ef2;
+  --color-on-accent: #ffffff;
 }
 
 body {
@@ -24,7 +52,7 @@ body {
 
 @layer components {
   .card {
-    @apply rounded-2xl border border-[#223048] bg-panel p-3.5;
+    @apply rounded-2xl border border-line bg-panel p-3.5;
   }
   .hdr {
     @apply mb-2.5 text-[13px] font-semibold uppercase tracking-wider text-dim desk:text-sm;

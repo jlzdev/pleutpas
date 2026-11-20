@@ -1,12 +1,13 @@
 import { createApp } from 'vue'
-import { registerSW } from 'virtual:pwa-register'
-import 'leaflet/dist/leaflet.css'
 import './style.css'
 import App from './App.vue'
 import { initStore } from './store'
 import { initInstall } from './lib/install'
+import { initTheme } from './lib/theme'
+import { initUpdates } from './lib/update'
 
-registerSW({ immediate: true })
+initTheme()
+initUpdates()
 initInstall()
 createApp(App).mount('#app')
 initStore()

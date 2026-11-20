@@ -48,17 +48,17 @@ function pickPlace(r: GeoResult): void {
     <p class="text-[15px] leading-5 text-ink [text-wrap:pretty]">Pleut pas ? te dit en un coup d'oeil si tu peux partir sans te faire tremper, et sinon à quelle heure.</p>
     <ul class="mt-3 grid gap-2 desk:grid-cols-3">
       <li v-for="f in FEATURES" :key="f.title" class="flex items-start gap-2.5 rounded-[10px] bg-panel2 px-3 py-2.5">
-        <svg class="mt-0.5 h-5 w-5 flex-none text-legere" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="f.icon"/></svg>
+        <svg class="mt-0.5 h-5 w-5 flex-none text-accent" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path :d="f.icon"/></svg>
         <p class="text-[13px] leading-[18px] text-dim [text-wrap:pretty]"><span class="font-semibold text-ink">{{ f.title }}</span>, {{ f.text }}</p>
       </li>
     </ul>
     <button
       v-if="geolocSupported"
-      class="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-legere/60 bg-panel2 px-3 py-3 text-[15px] font-semibold text-ink active:bg-line disabled:cursor-wait"
+      class="mt-4 inline-flex w-full cursor-pointer items-center justify-center gap-2 rounded-[10px] border border-accent/60 bg-panel2 px-3 py-3 text-[15px] font-semibold text-ink active:bg-line disabled:cursor-wait"
       :disabled="locating" @click="locateMe"
     >
       <span v-if="locating" class="block h-4 w-4 animate-spin rounded-full border-2 border-line border-t-ink"></span>
-      <svg v-else class="h-5 w-5 text-legere" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>
+      <svg v-else class="h-5 w-5 text-accent" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="5"/><circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none"/><path d="M10 1v3M10 16v3M1 10h3M16 10h3"/></svg>
       Utiliser ma position
     </button>
     <div v-if="message" class="mt-2 text-[13px] text-dim">{{ message }}</div>

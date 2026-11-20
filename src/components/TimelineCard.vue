@@ -4,6 +4,8 @@ import { departAt, dest, nowTick, refMs, trip, tripMin } from '../store'
 import { clockParts, fmtDayHM, fmtHM, fmtMinutes, STEP_5MIN_MS, timelineCells, type TimelineCell } from '../lib/meteo'
 
 const cells = computed<TimelineCell[]>(() => timelineCells(trip.value, refMs.value, tripMin.value))
+const SKELETON: TimelineCell[] = Array.from({ length: 24 }, (_, i) => ({ start: i, wet: false, color: null, title: '' }))
+const shown = computed(() => (cells.value.length ? cells.value : SKELETON))
 const tripMode = computed(() => dest.value !== null)
 const departNow = computed(() => departAt.value === null)
 const title = computed(() => {
@@ -89,11 +91,11 @@ const note = computed(() => {
 <template>
   <section class="card">
     <h2 class="hdr">{{ title }}</h2>
-    <template v-if="cells.length">
+    <template v-if="shown.length">
       <div class="mb-1 text-[11px] text-dim">{{ tripMode ? 'Chaque case = un départ à cette heure, couleur = la pluie la plus forte sur le trajet' : 'Chaque case = 5 min, couleur = intensité de la pluie' }}</div>
       <div class="flex h-7 gap-px overflow-hidden rounded-md desk:h-9" role="img" :aria-label="note">
         <span
-          v-for="(c, i) in cells" :key="i" :title="c.title"
+          v-for="(c, i) in shown" :key="i" :title="c.title"
           class="flex-1" :style="{ background: c.color ?? 'var(--color-line)' }"
         ></span>
       </div>

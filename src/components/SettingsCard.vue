@@ -5,6 +5,7 @@ import type { GeoResult } from '../lib/api'
 import { distanceKm, estimatedTripMin, fmtMinutes, MAX_TRIP_MIN, routeLabel, TRIP_SPEED_KMH, type Place } from '../lib/meteo'
 import { buildReminderIcs, downloadIcs, REMINDER_LEAD_MIN, reminderLabel as icsLabel } from '../lib/ics'
 import { geolocSupported, useLocate } from '../lib/locate'
+import { setTheme, theme, type Theme } from '../lib/theme'
 import PlaceSearch from './PlaceSearch.vue'
 
 const props = defineProps<{ place: Place }>()
@@ -13,6 +14,7 @@ const emit = defineEmits<{ close: [] }>()
 const { locating, message: geoMessage, locateMe, cancel } = useLocate()
 
 const SHORT_TRIP_KM = 4
+const THEMES: { value: Theme; label: string }[] = [{ value: 'auto', label: 'Auto' }, { value: 'light', label: 'Clair' }, { value: 'dark', label: 'Sombre' }]
 
 const tripHint = computed(() => {
   const d = dest.value
@@ -58,11 +60,10 @@ function pickDest(r: GeoResult): void {
 
 <template>
   <section class="card">
-    <h2 class="hdr !mb-1">Réglages</h2>
-    <p class="mb-3 text-[13px] text-dim">Chaque changement s'applique tout de suite, le verdict se met à jour en dessous.</p>
+    <h2 class="hdr">Réglages</h2>
     <label class="mb-2 block text-sm" for="tripRange">Durée du trajet : <b>{{ tripMin }} min</b></label>
     <input id="tripRange" type="range" class="w-full accent-legere" min="5" :max="MAX_TRIP_MIN" step="5" :value="tripMin" @input="onTrip">
-    <p v-if="tripHint" class="mt-1 text-[13px]" :class="tripHint.warn ? 'text-amber-500' : 'text-dim'">{{ tripHint.text }}</p>
+    <p v-if="tripHint" class="mt-1 text-[13px]" :class="tripHint.warn ? 'text-warn' : 'text-dim'">{{ tripHint.text }}</p>
     <label class="mb-2 mt-4 block text-sm" for="placeInput">{{ dest ? 'Départ' : 'Lieu' }} : <b>{{ place.name }}</b></label>
     <PlaceSearch id="placeInput" :near="place" @pick="pickPlace">
       <template #aside>
@@ -81,6 +82,13 @@ function pickDest(r: GeoResult): void {
     <PlaceSearch id="destInput" :near="place" :clearable="dest !== null" @pick="pickDest" @clear="setDest(null)" />
     <button v-if="dest" class="mt-2 w-full cursor-pointer rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line" @click="swapPlaces">Inverser le sens</button>
     <p v-else class="mt-1.5 text-[13px] text-dim">Avec une arrivée, la pluie est lue tout le long du trajet, à l'heure où tu y passes.</p>
+    <div class="mb-2 mt-4 text-sm" id="themeLabel">Affichage : <b>{{ THEMES.find((t) => t.value === theme)?.label }}</b></div>
+    <div class="flex gap-2" role="radiogroup" aria-labelledby="themeLabel">
+      <button
+        v-for="t in THEMES" :key="t.value" type="button" role="radio" :aria-checked="theme === t.value"
+        class="pickbtn flex-1" :class="theme === t.value ? '' : 'pickbtn-dim'" @click="setTheme(t.value)"
+      >{{ t.label }}</button>
+    </div>
     <details class="group mt-4">
       <summary class="flex cursor-pointer select-none list-none items-center justify-between gap-2 rounded-[10px] border border-line bg-panel2 px-3 py-2.5 text-sm active:bg-line [&::-webkit-details-marker]:hidden">
         <span>Rappel dans mon agenda <span class="text-dim">(facultatif)</span></span>

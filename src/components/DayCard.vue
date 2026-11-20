@@ -19,7 +19,7 @@ interface Run {
 const SURE_PCT = 70
 const SHOWER_PCT = 40
 const DRY_CELL = 'var(--color-line)'
-const GREY = '#8fa1b8'
+const GREY = 'var(--color-dim)'
 const HATCH_MIX = 25
 const END_FROM = 20
 const deskQuery = window.matchMedia('(min-width: 900px)')
@@ -161,6 +161,12 @@ const note = computed(() => {
           :style="m.end ? { right: (100 - (m.i / 24) * 100) + '%' } : { left: leftOf(m.i) }"
         >{{ m.label }}</span>
       </div>
+    </template>
+    <template v-else>
+      <div class="flex h-7 gap-px overflow-hidden rounded-md desk:h-9" aria-hidden="true">
+        <div v-for="i in 24" :key="i" class="flex-1" :style="{ backgroundColor: DRY_CELL }"></div>
+      </div>
+      <div class="mt-1 h-4"></div>
     </template>
     <div class="mt-2.5 text-[15px] leading-5 text-ink [text-wrap:pretty]">{{ note }}</div>
   </section>

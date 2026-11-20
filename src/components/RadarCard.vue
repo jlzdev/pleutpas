@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import * as L from 'leaflet'
+import 'leaflet/dist/leaflet.css'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { dest, futureRain, recenterTick, setDest } from '../store'
 import { bearingDeg, fmtHM, FRANCE_BOUNDS, type Place } from '../lib/meteo'
@@ -380,11 +381,11 @@ onBeforeUnmount(() => {
   <section class="card">
     <h2 class="hdr">Radar de précipitation</h2>
     <div class="relative">
-      <div ref="mapEl" class="radar-map h-[340px] rounded-xl bg-[#0a0f18] desk:h-[520px]"></div>
+      <div ref="mapEl" class="radar-map h-[340px] rounded-xl bg-night desk:h-[520px]"></div>
       <div
         v-if="current"
         class="pointer-events-none absolute left-2 top-2 z-[1000] rounded-lg px-2.5 py-1 text-xs font-bold transition-colors"
-        :class="current.type === 'fcst' ? 'bg-legere text-[#06121f]' : 'bg-[#0a0f18]/75 text-dim'"
+        :class="current.type === 'fcst' ? 'bg-legere text-[#06121f]' : 'bg-night/80 text-ink'"
       >
         {{ current.type === 'fcst' ? 'Prévision' : 'Radar' }} {{ fmtHM(current.time * 1000) }}
       </div>
@@ -392,7 +393,7 @@ onBeforeUnmount(() => {
         <svg class="h-10 w-10 overflow-visible drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]" viewBox="0 0 20 20" fill="#1d6ef2" stroke="#fff" stroke-width="1.5" stroke-linejoin="round"><path d="M10 20c-3.6-4.3-6-7.8-6-11.2a6 6 0 0 1 12 0C16 12.2 13.6 15.7 10 20z"/><circle cx="10" cy="8.6" r="2.2" fill="#fff" stroke="none"/></svg>
       </div>
     </div>
-    <div v-if="mapMsg" class="mt-2 text-xs text-amber-300" role="alert">{{ mapMsg }}</div>
+    <div v-if="mapMsg" class="mt-2 text-xs text-warn" role="alert">{{ mapMsg }}</div>
     <MapPickBar v-if="picking" :name="pickName" :resolving="resolving" :pending="pickPending !== null" :outside="outside" :can-start="canStart" :can-dest="canDest" :has-dest="!!dest" @start="useAsStart" @dest="useAsDest" @cancel="onCancel" @remove-dest="setDest(null)" />
     <template v-else>
       <div class="mt-2.5 flex items-center gap-2.5">
@@ -406,7 +407,7 @@ onBeforeUnmount(() => {
         >
         <div class="min-w-[88px] text-right text-sm tabular-nums">
           {{ current ? fmtHM(current.time * 1000) : '--h--' }}
-          <span v-if="current?.type === 'fcst'" class="block text-[10px] text-bruine">prévision</span>
+          <span v-if="current?.type === 'fcst'" class="block text-[10px] text-accent">prévision</span>
         </div>
       </div>
       <div class="mt-2 text-xs text-dim">{{ note }} Avec l'épingle, choisis un lieu directement sur la carte.</div>

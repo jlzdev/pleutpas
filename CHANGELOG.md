@@ -6,6 +6,20 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.13.0] - 2026-11-20
+
+### Améliorations
+
+- Thème clair, lisible en plein soleil : réglage "Affichage" Auto / Clair / Sombre dans les réglages (Auto suit le réglage du téléphone), couleurs de l'interface en variables partagées, barre d'état du téléphone assortie (iPhone compris en PWA), pas de flash au chargement. Audit d'accessibilité axe sans violation dans les deux thèmes, contrastes recalculés (bleu d'accent plus foncé en clair).
+- Réglages : la phrase sous le titre est retirée, le bouton "C'est bon" suffit.
+- Nouvelle version : quand une mise à jour du site est prête, un bandeau "Nouvelle version disponible" propose de recharger (ou "plus tard"), au lieu de laisser l'ancienne version en place jusqu'au prochain lancement ; vérification toutes les heures quand l'app reste ouverte.
+
+### Performances
+
+- La carte (Leaflet) est chargée à part, après le verdict : le bundle principal passe de 96 à 51 Ko compressés, un emplacement de la même hauteur évite tout saut de page.
+- Les appels Météo-France (pluie dans l'heure, prévision) et les manifests d'images partent dès le HTML, avant le chargement du code, pour le lieu mémorisé ou celui de l'adresse.
+- Au retour au premier plan, seule la pluie dans l'heure est rechargée tant que la prévision a moins de 15 minutes et que rien ne manque (la prévision Météo-France change au plus tous les quarts d'heure) ; si la carte ne se charge pas, elle réessaie trois fois puis l'indique au lieu de rester sur "Chargement".
+
 ## [1.12.0] - 2026-11-20
 
 ### Améliorations

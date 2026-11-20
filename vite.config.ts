@@ -1,16 +1,35 @@
-import { defineConfig } from 'vite'
+import { defineConfig, type Plugin } from 'vite'
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 import { version } from './package.json'
 
+function preloadChunks(names: string[]): Plugin {
+  let files: string[] = []
+  return {
+    name: 'preload-chunks',
+    apply: 'build',
+    enforce: 'pre',
+    generateBundle(_, bundle) {
+      files = Object.values(bundle)
+        .filter((c) => c.type === 'chunk' && names.includes(c.name))
+        .map((c) => c.fileName)
+    },
+    transformIndexHtml: {
+      order: 'post',
+      handler: () => files.map((f) => ({ tag: 'link', attrs: { rel: 'modulepreload', href: '/' + f, crossorigin: true }, injectTo: 'head' as const })),
+    },
+  }
+}
+
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [
+    preloadChunks(['RadarCard']),
     vue(),
     tailwindcss(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['icons/icon.svg', 'icons/icon-192.png'],
       manifest: {
         name: 'Pleut pas ?',

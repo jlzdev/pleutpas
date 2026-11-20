@@ -117,8 +117,23 @@ function deptOf(v: unknown): string | null {
   return typeof v === 'string' && DEPT_RE.test(v) ? v : null
 }
 
+declare global {
+  interface Window { __ppEarly?: Record<string, Promise<Response>> }
+}
+
+// contrat avec le script inline d'index.html : memes URL, consommees une fois
+function earlyFetch(url: string): Promise<Response> {
+  const early = window.__ppEarly
+  const p = early?.[url]
+  if (p && early) {
+    delete early[url]
+    return p
+  }
+  return fetch(url)
+}
+
 export async function fetchRain(place: Place): Promise<RainResult> {
-  const res = await fetch('https://webservice.meteofrance.com/rain?lat=' + place.lat
+  const res = await earlyFetch('https://webservice.meteofrance.com/rain?lat=' + place.lat
     + '&lon=' + place.lon + '&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance http ' + res.status)
   const data = await res.json()
@@ -204,7 +219,7 @@ function mfProba(list: MfRecord[], nowMs: number): ProbaSpan[] {
 // sur ~36 h puis 3 h et 6 h en France, pas de 3 h seulement hors de France ; un seul appel nourrit
 // la prevision point (pluie, conditions, probabilite) et l'info hiver (neige, risque de verglas)
 export async function fetchForecastMF(place: Place, nowMs: number): Promise<MfForecast | null> {
-  const res = await fetch('https://webservice.meteofrance.com/v2/forecast?lat=' + place.lat
+  const res = await earlyFetch('https://webservice.meteofrance.com/v2/forecast?lat=' + place.lat
     + '&lon=' + place.lon + '&lang=fr&token=' + MF_TOKEN)
   if (!res.ok) throw new Error('meteofrance forecast http ' + res.status)
   const data = await res.json()
@@ -281,7 +296,7 @@ interface FrameManifest {
 }
 
 async function fetchManifest(base: string): Promise<FrameManifest | null> {
-  const res = await fetch(base + '/manifest.json')
+  const res = await earlyFetch(base + '/manifest.json')
   if (!res.ok) throw new Error('manifest frames http ' + res.status)
   const m = await res.json()
   if (!m.run || !m.bounds || !m.frames?.length) return null

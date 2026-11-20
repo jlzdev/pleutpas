@@ -39,6 +39,7 @@ const KEY_PLACE = 'pleutpas.place'
 const KEY_DEST = 'pleutpas.dest'
 const KEY_CACHE = 'pleutpas.cache'
 const KEY_REMINDER = 'pleutpas.reminderTime'
+const FORECAST_TTL_MS = 15 * 60 * 1000
 
 export function lsGet(key: string): string | null {
   try { return localStorage.getItem(key) } catch { return null }
@@ -110,6 +111,8 @@ export const rainMFDest = ref<MfEntry[] | null>(null)
 export const forecastMF = ref<MfForecast | null>(null)
 export const forecastMFDest = ref<MfForecast | null>(null)
 export const vigilance = ref<Vigilance | null>(null)
+export const forecastAt = ref<number | null>(null)
+let forecastKey = ''
 export const frameSamples = ref<FrameSample[] | null>(null)
 export const radarPending = ref(false)
 export const futureRain = ref<FutureRain | null>(null)
@@ -198,6 +201,17 @@ export async function refresh(fromButton = false): Promise<void> {
   if (fromButton) recenterTick.value++
   const futP = fetchFutureRain().catch(() => null)
   const now = Date.now()
+  const key = cacheKey(p, d)
+  const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
+  const complete = !!forecast.value && (!d || !!forecastDest.value)
+    && (vigilance.value !== null || !(forecastMF.value?.dept || forecastMFDest.value?.dept))
+  if (!fromButton && complete && forecastKey === key && forecastAt.value !== null && now - forecastAt.value < FORECAST_TTL_MS) {
+    const [r, rd] = await Promise.allSettled([fetchRain(p), d ? fetchRain(d) : Promise.resolve(null)])
+    if (seq !== refreshSeq) return
+    if (r.status === 'fulfilled') rainMF.value = r.value.entries
+    if (rd.status === 'fulfilled') rainMFDest.value = rd.value?.entries ?? null
+    if (r.status === 'fulfilled' || rd.status === 'fulfilled') fetchedAt.value = Date.now()
+  } else {
   const abroad = (m: MfForecast | null) => !!m?.country && !m.country.startsWith('FR')
   const earlyOm = places.filter((_, i) => abroad(i === 0 ? forecastMF.value : forecastMFDest.value))
   const earlyP = earlyOm.length ? fetchWeather(earlyOm, now).catch(() => null) : null
@@ -208,7 +222,6 @@ export async function refresh(fromButton = false): Promise<void> {
     d ? fetchForecastMF(d, now) : Promise.resolve(null),
   ])
   if (seq !== refreshSeq) return
-  const settled = <T>(x: PromiseSettledResult<T | null>): T | null => (x.status === 'fulfilled' ? x.value : null)
   const rain = settled(r)
   const rainDest = settled(rd)
   const fc = f.status === 'fulfilled' ? f.value : forecastMF.value
@@ -226,8 +239,9 @@ export async function refresh(fromButton = false): Promise<void> {
     om?.forEach((pt, i) => got.set(missing[i], pt))
     points.forEach((pt, i) => { if (!pt) points[i] = got.get(places[i]) ?? null })
   }
-  const key = cacheKey(p, d)
   if (points[0]) {
+    forecastAt.value = now
+    forecastKey = key
     displayZone.value = points[0].timezone ?? undefined
     forecast.value = points[0]
     forecastDest.value = points[1] ?? null
@@ -250,6 +264,7 @@ export async function refresh(fromButton = false): Promise<void> {
   forecastMFDest.value = fcDest
   void fetchVigilance([fc?.dept ?? rain?.dept ?? null, d ? (fcDest?.dept ?? rainDest?.dept ?? null) : null])
     .then((v) => { if (seq === refreshSeq) vigilance.value = v }, () => undefined)
+  }
   const fut = await futP
   if (seq !== refreshSeq) return
   futureRain.value = hasFuture(fut) ? fut : (hasFuture(futureRain.value) ? futureRain.value : null)
@@ -271,6 +286,7 @@ function resetData(): void {
   forecastMF.value = null
   forecastMFDest.value = null
   vigilance.value = null
+  forecastAt.value = null
   recenterTick.value++
   void refresh(false)
 }
@@ -335,6 +351,6 @@ declare global {
 }
 window.__pp = {
   place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest, vigilance,
-  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs,
+  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs, forecastAt,
   refresh, setPlace, setDest, swapPlaces, setDepartAt, fetchWarning, isMfPointUsable, hourlyEndMs,
 }

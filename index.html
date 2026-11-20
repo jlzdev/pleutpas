@@ -3,11 +3,49 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#0e1420">
-<style>html{background:#0e1420;color:#e8edf5}</style>
+<meta name="theme-color" content="#0e1420" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#eef2f7" media="(prefers-color-scheme: light)">
+<style>html{background:#0e1420;color:#e8edf5}@media (prefers-color-scheme: light){html:not([data-theme="dark"]){background:#eef2f7;color:#101826}}html[data-theme="light"]{background:#eef2f7;color:#101826}</style>
+<script>
+(function () {
+  try {
+    var t = localStorage.getItem('pleutpas.theme');
+    if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  } catch (e) {}
+  try {
+    var q = new URLSearchParams(location.search);
+    var lat = parseFloat(q.get('lat')), lon = parseFloat(q.get('lon'));
+    var place = null, dest = null;
+    if (isFinite(lat) && isFinite(lon)) {
+      place = { lat: lat, lon: lon };
+      var alat = parseFloat(q.get('alat')), alon = parseFloat(q.get('alon'));
+      if (isFinite(alat) && isFinite(alon)) dest = { lat: alat, lon: alon };
+    } else {
+      place = JSON.parse(localStorage.getItem('pleutpas.place') || 'null');
+      dest = JSON.parse(localStorage.getItem('pleutpas.dest') || 'null');
+    }
+    var inZone = function (p) {
+      return !!p && typeof p.lat === 'number' && typeof p.lon === 'number'
+        && p.lat >= 41 && p.lat <= 51.5 && p.lon >= -5.5 && p.lon <= 10;
+    };
+    if (!inZone(place)) return;
+    var early = {};
+    var add = function (url) { var p = fetch(url); p.catch(function () {}); early[url] = p; };
+    var token = '__Wj7dVSTjV9YGu1guveLyDq0g7S7TfTjaHBTPTpO0kj8__';
+    [place, inZone(dest) ? dest : null].forEach(function (p) {
+      if (!p) return;
+      add('https://webservice.meteofrance.com/rain?lat=' + p.lat + '&lon=' + p.lon + '&token=' + token);
+      add('https://webservice.meteofrance.com/v2/forecast?lat=' + p.lat + '&lon=' + p.lon + '&lang=fr&token=' + token);
+    });
+    add('https://raw.githubusercontent.com/jlzdev/pleutpas/piaf/manifest.json');
+    add('https://raw.githubusercontent.com/jlzdev/pleutpas/data/manifest.json');
+    window.__ppEarly = early;
+  } catch (e) {}
+})();
+</script>
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Pleut pas ?">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <title>Pleut pas ? Je peux rouler à vélo ? Pluie en direct et prévision</title>
 <meta name="description" content="Est-ce que je peux prendre mon vélo, et sinon à quelle heure ? Verdict immédiat : radar temps réel, pluie dans l'heure et prévision AROME Météo-France, minute par minute, en France et dans les pays voisins.">
 <link rel="canonical" href="https://pleutpas.fr/">

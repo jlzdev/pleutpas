@@ -58,7 +58,7 @@ const foot = computed(() => {
 
 <template>
   <section
-    class="rounded-2xl px-3.5 py-4 text-center text-white transition-colors"
+    class="flex min-h-[186px] flex-col justify-center rounded-2xl px-3.5 py-4 text-center text-white transition-colors desk:min-h-[230px]"
     :class="{ 'v-oui': verdict.state === 'oui', 'v-bof': verdict.state === 'bof', 'v-pluie': verdict.state === 'pluie', 'v-inconnu': verdict.state === 'inconnu' }"
   >
     <div class="text-[clamp(44px,14vw,72px)] font-extrabold leading-none tracking-wide desk:text-[84px]">{{ verdict.big }}</div>

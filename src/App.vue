@@ -1,14 +1,37 @@
 <script setup lang="ts">
-import { computed, ref, watchEffect } from 'vue'
+import { computed, defineAsyncComponent, h, ref, watchEffect } from 'vue'
 import { dest, fetchedAt, nowTick, place, refresh, refreshing, swapPlaces } from './store'
 import { deviceZone, displayZone, fmtHM, placeTown, routeLabel, routeLabels } from './lib/meteo'
 import VerdictCard from './components/VerdictCard.vue'
 import SettingsCard from './components/SettingsCard.vue'
 import TimelineCard from './components/TimelineCard.vue'
-import RadarCard from './components/RadarCard.vue'
+import UpdateBanner from './components/UpdateBanner.vue'
 import DayCard from './components/DayCard.vue'
 import InstallBanner from './components/InstallBanner.vue'
 import WelcomeCard from './components/WelcomeCard.vue'
+
+const RadarCard = defineAsyncComponent({
+  loader: () => import('./components/RadarCard.vue'),
+  delay: 0,
+  loadingComponent: {
+    render: () => h('section', { class: 'card' }, [
+      h('h2', { class: 'hdr' }, 'Radar de précipitation'),
+      h('div', { class: 'h-[340px] rounded-xl bg-night desk:h-[520px]' }),
+      h('div', { class: 'mt-2.5 h-[42px]' }),
+      h('div', { class: 'mt-2 h-8 text-xs text-dim' }, 'Chargement de la carte...'),
+    ]),
+  },
+  errorComponent: {
+    render: () => h('section', { class: 'card' }, [
+      h('h2', { class: 'hdr' }, 'Radar de précipitation'),
+      h('p', { class: 'text-sm text-dim' }, 'Carte indisponible pour le moment, recharge la page pour réessayer.'),
+    ]),
+  },
+  onError(_error, retry, fail, attempts) {
+    if (attempts <= 3) setTimeout(retry, 1000 * attempts)
+    else fail()
+  },
+})
 
 const settingsOpen = ref(false)
 const version = __APP_VERSION__
@@ -39,13 +62,12 @@ const updatedText = computed(() => fetchedAt.value === null
   </header>
   <main class="mx-auto flex max-w-[640px] flex-col gap-3.5 px-3.5 pb-6 pt-2.5 desk:max-w-[860px]">
     <SettingsCard v-if="place" v-show="settingsOpen" :place="place" @close="settingsOpen = false" />
-    <InstallBanner />
     <template v-if="place">
       <VerdictCard :place="place" />
       <TimelineCard />
       <RadarCard :place="place" />
       <DayCard />
-      <div class="text-center text-xs" :class="updatedStale ? 'text-amber-500' : 'text-dim'">{{ updatedText }}</div>
+      <div class="text-center text-xs" :class="updatedStale ? 'text-warn' : 'text-dim'">{{ updatedText }}</div>
     </template>
     <WelcomeCard v-else />
     <details class="group card text-sm text-dim">
@@ -63,6 +85,10 @@ const updatedText = computed(() => fetchedAt.value === null
       </ul>
     </details>
   </main>
+  <div class="pointer-events-none fixed inset-x-0 bottom-0 z-[1100] mx-auto flex max-w-[640px] flex-col gap-2 px-3.5 pb-[calc(0.875rem+env(safe-area-inset-bottom))] desk:max-w-[860px] [&>*]:pointer-events-auto">
+    <UpdateBanner />
+    <InstallBanner />
+  </div>
   <footer class="mx-auto flex max-w-[640px] flex-wrap items-center justify-center gap-x-3 px-3.5 pb-7 text-[11px] leading-4 text-dim desk:max-w-[860px] [&_a]:inline-block [&_a]:py-1">
     <span><a class="underline" href="https://meteofrance.com/" target="_blank" rel="noopener" title="Pluie dans l'heure, prévision, vigilance, PIAF et AROME-PI">Météo-France</a>
       (<a class="underline" href="https://www.etalab.gouv.fr/licence-ouverte-open-licence" target="_blank" rel="noopener">Licence Ouverte</a>)</span>

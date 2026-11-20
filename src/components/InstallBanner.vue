@@ -3,7 +3,7 @@ import { dismissInstall, installState, promptInstall } from '../lib/install'
 </script>
 
 <template>
-  <div v-if="installState !== 'hidden'" class="flex items-center gap-3 rounded-2xl border border-line bg-panel px-3.5 py-2.5 text-sm">
+  <div v-if="installState !== 'hidden'" class="flex items-center gap-3 rounded-2xl border border-line bg-panel px-3.5 py-2.5 text-sm shadow-[0_8px_30px_rgba(0,0,0,0.45)]">
     <img src="/icons/icon.svg" alt="" class="h-9 w-9 flex-none">
     <div class="min-w-0 flex-1">
       <b>Ajoute Pleut pas ? à ton écran d'accueil</b>
@@ -12,7 +12,7 @@ import { dismissInstall, installState, promptInstall } from '../lib/install'
     </div>
     <button
       v-if="installState === 'android'"
-      class="flex-none cursor-pointer rounded-[10px] bg-legere px-3 py-2 text-sm font-semibold text-night active:opacity-80"
+      class="flex-none cursor-pointer rounded-[10px] bg-accent px-3 py-2 text-sm font-semibold text-on-accent active:opacity-80"
       @click="promptInstall"
     >Installer</button>
     <button class="iconbtn !h-9 !w-9 text-base" aria-label="Ne plus proposer" @click="dismissInstall">✕</button>
