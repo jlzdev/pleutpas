@@ -6,6 +6,31 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.15.0] - 2026-11-27
+
+### Améliorations
+
+- Verdict : le gros mot dit l'état, OUI (vert), BRUINE (bleu-vert sombre, bruine ou pluie faible) ou PLUIE (bleu). Le sous-titre disparaît ("Ça roule" n'apportait rien) : le moment de la pluie ("En ce moment", "Prévue vers 18h") ouvre en gras la ligne de détail, suivie du prochain départ au sec.
+- Verdict BRUINE : le fond orange est remplacé par un bleu-vert sombre, dans la teinte de la case "Bruine" de la légende, entre le vert du OUI et le bleu de PLUIE. Le texte blanc y est plus lisible qu'avant (contraste de 4,7 à 8,3 contre 3,2 à 5,1 sur l'orange).
+- Verdict : de nuit, la note devient "Jour à 7h57." (ou "Jour demain à 7h57.") à la place de "Nuit jusqu'à demain 7h57.", sur sa propre ligne sous la température et le vent. "Nuit à 17h04." reste affiché quand la nuit tombe pendant le trajet ou dans l'heure qui suit. Le gros mot est plus petit et le cartouche moins haut. Chaque ligne du verdict est une seule phrase : des virgules entre les informations, un point à la fin ("0 °C, ressenti -3 °C, vent calme, risque de verglas 90 %.", "En ce moment, prochain départ au sec : 20h40.").
+- Lieu et trajet : le panneau "Réglages" disparaît. Le lieu (ou le trajet) s'affiche dans une barre sous le titre, un appui dessus ouvre le choix du lieu : départ, arrivée facultative, inversion, "Ma position", lieux récents et favoris. Choisir applique tout de suite et referme.
+- Favoris : une étoile à côté du lieu garde le lieu ou le trajet affiché en un appui (et le retire, avec "Annuler"). Le nom se change ensuite. Les favoris se modifient enfin sans les recréer, dans les préférences : nom, durée, ordre, remplacement par le lieu ou le trajet affiché, partage, suppression avec annulation. "Favori" remplace "trajet enregistré" partout, six au plus.
+- Durée du trajet : elle se règle depuis le verdict, sur la même ligne que l'heure de départ ("Départ maintenant", "Trajet de 25 min"), avec des boutons + et - et des durées courantes. Quand un favori est affiché, il retient la nouvelle durée.
+- Heure de départ : le sélecteur d'heure du téléphone (dont le bouton de validation était coupé sur certains Android) est remplacé par une fiche maison : heures d'aujourd'hui et de demain en un appui, minutes 00 / 15 / 30 / 45, ajustement par 5 min et retour à "Maintenant".
+- Préférences (roue dentée) : favoris, partage du lieu ou du trajet affiché, rappel dans l'agenda et affichage Auto / Clair / Sombre, à part du choix du lieu.
+- Le rappel dans l'agenda revient (fichier .ics, du lundi au vendredi, 15 min avant l'heure de départ habituelle, avec le lien vers le lieu ou le trajet affiché). L'heure se choisit dans deux listes, heures et minutes.
+- Lieux récents : les cinq derniers lieux choisis sont proposés dans le choix du lieu, sur l'appareil seulement.
+- Le bouton retour du téléphone referme la fiche ouverte au lieu de quitter l'app.
+- Chaque fiche (lieu, heure de départ, durée, préférences) se ferme par la croix ou par un bouton "C'est bon" en bas, les changements étant déjà appliqués. Les éléments cliquables ou sélectionnés des fiches sont en bleu.
+
+- Contrastes : tous les textes atteignent le seuil d'accessibilité (4,5 pour 1), dans les deux thèmes. Le vert du OUI et le bleu de PLUIE sont un peu plus sombres dans leur partie claire, les lignes du verdict sont en blanc plein (plus de transparence) et les mentions fortes ("vent fort", risque de verglas élevé) en gras blanc sur les trois fonds, à la place de l'ambre trop peu lisible sur le vert et le bleu. La légende de la frise écrit en sombre sur toutes ses cases. En thème sombre, les champs ont une bordure visible. En thème clair, l'avertissement de données anciennes est plus foncé.
+
+### Corrections
+
+- Changer la durée pendant qu'un favori était affiché ne la mémorisait pas, elle revenait à l'ancienne valeur au prochain appui sur le favori.
+- Changer le départ d'un trajet recalcule la durée d'après la nouvelle distance, comme le faisait déjà le changement d'arrivée. Quand le trajet affiché correspond à un favori, c'est la durée du favori qui est reprise.
+- Rappel dans l'agenda : ajouté un samedi ou un dimanche, il commence le lundi suivant au lieu de sonner une première fois le week-end. Les points-virgules d'un nom de lieu sont correctement écrits dans le fichier.
+
 ## [1.14.2] - 2026-11-27
 
 ### Améliorations

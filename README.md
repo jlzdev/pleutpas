@@ -1,12 +1,12 @@
 # Pleut pas ?
 
 Est-ce que je peux prendre mon vélo maintenant, et sinon à quelle heure ? Gros verdict
-OUI / PLUIE selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
+OUI / BRUINE / PLUIE selon la pluie sur la durée du trajet, prévision fine sur les 2 prochaines
 heures, carte animée (pluie observée puis prévue) et vue de la suite de la journée,
 pour un départ maintenant ou à l'heure de son choix (retour du soir, lendemain matin) ;
 nuit au départ ou pendant le trajet indiquée sous le verdict (lever et coucher calculés localement),
 thème sombre ou clair (lisible en plein soleil), automatique ou au choix,
-trajets enregistrés rappelés d'un appui (et depuis le menu de l'icône sur Android), partage d'un lieu ou d'un trajet par lien.
+lieux et trajets favoris (étoile à côté du lieu) rappelés d'un appui (et depuis le menu de l'icône sur Android), partage d'un lieu ou d'un trajet par lien, rappel facultatif dans l'agenda (fichier .ics, sans serveur).
 Lieu choisi au premier lancement (géolocalisation, recherche de ville ou d'adresse, épingle posée sur la carte, ou URL), mémorisé sur l'appareil,
 arrivée facultative (la pluie est alors lue tout le long du trajet, en ligne droite, à
 l'heure où l'on passe à chaque endroit, et le vent devient "de face", "de dos" ou "de

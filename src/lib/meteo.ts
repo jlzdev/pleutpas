@@ -204,7 +204,6 @@ const TIMELINE_CELLS = 24
 export function timelineEndMs(nowMs: number): number {
   return Math.floor(nowMs / STEP_5MIN_MS) * STEP_5MIN_MS + TIMELINE_CELLS * STEP_5MIN_MS
 }
-const LEGERE_MM = palette.steps.find((s) => s.name === 'legere')?.mm ?? LIGHT_MAX_MM
 
 // fuseau du lieu consulte (fourni par Open-Meteo), undefined = celui de l'appareil ;
 // les heures affichees sont celles du lieu, comme sur toute app meteo
@@ -618,9 +617,6 @@ export function intensityColor(mm15: number): string | null {
   return name ? 'var(--color-' + name + ')' : null
 }
 
-function lightWord(mm15: number): string {
-  return mm15 < LEGERE_MM ? 'Bruine' : 'Pluie faible'
-}
 
 const INTENSITY_WORDS: Record<string, string> = {
   traces: 'traces', bruine: 'bruine', legere: 'pluie légère', modere: 'pluie modérée',
@@ -778,13 +774,12 @@ export function computeVerdict(
     return {
       state: 'oui',
       big: 'OUI',
-      sub: 'Ça roule',
+      sub: '',
       detail: firstWet < 0 ? '' : 'Sec jusqu\'à ' + fmtDayHM(firstWet, nowMs) + ' environ.',
     }
   }
   const nowMm = Math.max(mmAtTrip(trip, 0, departMs) ?? 0, startStepMm(trip, departMs, departMs + tripMin * 60000) ?? 0, radarMm ?? 0)
   const rainingNow = nowMm >= WET_MM
-  const nowWord = departNow ? 'en ce moment' : 'au départ'
   const wet = firstWetOnTrip(trip, departMs, tripMin)
   const wetT = wet ? wet.time : firstWet
   const where = wet ? whereWord(trip, wet.pos) : ''
@@ -794,16 +789,16 @@ export function computeVerdict(
   // PLUIE est reserve a la vraie pluie
   const radarOnly = tripMm < WET_MM
   const unforeseen = 'Averse non prévue, reviens voir quand elle passe.'
+  const sub = rainingNow || wetT < 0
+    ? (departNow ? 'En ce moment' : 'Au départ')
+    : 'Prévue vers ' + fmtDayHM(wetT, nowMs) + where
   if (worstMm < LIGHT_MAX_MM) {
-    const word = lightWord(rainingNow ? nowMm : worstMm)
     return {
       state: 'bof',
-      big: 'OUI',
-      sub: rainingNow || wetT < 0
-        ? word + ' ' + nowWord
-        : word + ' prévue vers ' + fmtDayHM(wetT, nowMs) + where,
+      big: 'BRUINE',
+      sub,
       detail: radarOnly ? unforeseen
-        : depMs < 0 ? noDryWindow : 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
+        : depMs < 0 ? noDryWindow : 'Prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
     }
   }
   if (radarOnly) {
@@ -814,9 +809,6 @@ export function computeVerdict(
       detail: unforeseen,
     }
   }
-  const sub = rainingNow || wetT < 0
-    ? (departNow ? 'En ce moment' : 'Au départ')
-    : 'Prévue vers ' + fmtDayHM(wetT, nowMs) + where
   if (depMs < 0) {
     return { state: 'pluie', big: 'PLUIE', sub, detail: noDryWindow }
   }
@@ -824,6 +816,6 @@ export function computeVerdict(
     state: 'pluie',
     big: 'PLUIE',
     sub,
-    detail: 'Sinon, prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
+    detail: 'Prochain départ au sec : ' + fmtDayHM(depMs, nowMs) + '.',
   }
 }

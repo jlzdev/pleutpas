@@ -110,12 +110,12 @@ const note = computed(() => {
         </template>
       </div>
       <div class="mt-3.5 flex overflow-hidden rounded-md text-center text-[10px] font-semibold leading-tight text-[#06121f] desk:text-xs">
-        <span class="flex flex-1 items-center justify-center bg-traces py-0.5 text-white">Traces</span>
+        <span class="flex flex-1 items-center justify-center bg-traces py-0.5">Traces</span>
         <span class="flex flex-1 items-center justify-center bg-bruine py-0.5">Bruine</span>
         <span class="flex flex-1 items-center justify-center bg-legere py-0.5">Légère</span>
-        <span class="flex flex-1 items-center justify-center bg-modere py-0.5 text-white">Modérée</span>
-        <span class="flex flex-1 items-center justify-center bg-fort py-0.5 text-white">Forte</span>
-        <span class="flex flex-1 items-center justify-center bg-tresfort py-0.5 text-white">Très forte</span>
+        <span class="flex flex-1 items-center justify-center bg-modere py-0.5">Modérée</span>
+        <span class="flex flex-1 items-center justify-center bg-fort py-0.5">Forte</span>
+        <span class="flex flex-1 items-center justify-center bg-tresfort py-0.5">Très forte</span>
         <span class="flex flex-1 items-center justify-center bg-grele py-0.5">Grêle</span>
       </div>
     </template>

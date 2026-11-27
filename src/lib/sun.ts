@@ -1,4 +1,4 @@
-import { fmtDayHM, type InfoText, type Place } from './meteo'
+import { fmtDay, fmtHM, type InfoText, type Place } from './meteo'
 
 const DAY_MS = 86400000
 const J2000 = 2451545
@@ -57,7 +57,9 @@ const SUNSET_AHEAD_MS = 60 * 60000
 export function sunNote(place: Place, departMs: number, tripMin: number, nowMs: number): InfoText | null {
   const d = daylightAt(place.lat, place.lon, departMs)
   if (!d) return null
-  if (d.dark) return { text: 'Nuit jusqu\'à ' + fmtDayHM(d.next, nowMs) + '.', strong: false }
-  if (d.next <= departMs + tripMin * 60000 + SUNSET_AHEAD_MS) return { text: 'Nuit à ' + fmtDayHM(d.next, nowMs) + '.', strong: false }
+  const day = fmtDay(d.next, nowMs)
+  const at = (day ? day + ' ' : '') + 'à ' + fmtHM(d.next) + '.'
+  if (d.dark) return { text: 'Jour ' + at, strong: false }
+  if (d.next <= departMs + tripMin * 60000 + SUNSET_AHEAD_MS) return { text: 'Nuit ' + at, strong: false }
   return null
 }

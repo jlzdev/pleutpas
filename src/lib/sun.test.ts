@@ -29,10 +29,10 @@ describe('soleil', () => {
   })
   it('note sous le verdict : nuit au départ, nuit pendant le trajet, rien en plein jour', () => {
     const now = Date.UTC(2026, 10, 20, 6, 0)
-    expect(sunNote(BESANCON, now, 15, now)?.text).toMatch(/^Nuit jusqu'à 7h[45]\d\.$/)
+    expect(sunNote(BESANCON, now, 15, now)?.text).toMatch(/^Jour à 7h[45]\d\.$/)
     const afternoon = Date.UTC(2026, 10, 20, 15, 30)
     expect(sunNote(BESANCON, afternoon, 15, now)?.text).toMatch(/^Nuit à 1[67]h\d\d\.$/)
     expect(sunNote(BESANCON, Date.UTC(2026, 10, 20, 11, 0), 15, now)).toBeNull()
-    expect(sunNote(BESANCON, Date.UTC(2026, 10, 21, 6, 0), 15, now)?.text).toMatch(/^Nuit jusqu'à demain 7h/)
+    expect(sunNote(BESANCON, Date.UTC(2026, 10, 21, 6, 0), 15, now)?.text).toMatch(/^Jour demain à 7h/)
   })
 })

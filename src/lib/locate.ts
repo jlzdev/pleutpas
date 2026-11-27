@@ -40,8 +40,8 @@ export function useLocate() {
     message.value = ''
   }
 
-  async function locateMe(to: LocateTarget = 'place'): Promise<void> {
-    if (locating.value) return
+  async function locateMe(to: LocateTarget = 'place'): Promise<boolean> {
+    if (locating.value) return false
     const mine = ++seq
     locating.value = true
     target.value = to
@@ -51,18 +51,20 @@ export function useLocate() {
       const lat = Number(pos.lat.toFixed(STORED_DECIMALS))
       const lon = Number(pos.lon.toFixed(STORED_DECIMALS))
       const name = await reverseGeocodeName(lat, lon)
-      if (mine !== seq) return
+      if (mine !== seq) return false
       locating.value = false
       target.value = null
       message.value = ''
       const found = { name: name ?? 'Ma position', lat, lon }
       if (to === 'dest') setDest(found)
       else setPlace(found)
+      return true
     } catch (e) {
-      if (mine !== seq) return
+      if (mine !== seq) return false
       locating.value = false
       target.value = null
       message.value = locateError(e)
+      return false
     }
   }
 

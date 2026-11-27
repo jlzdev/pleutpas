@@ -19,7 +19,7 @@
   --color-accent: #4aa8ff;
   --color-on-accent: #0e1420;
   --color-field: #1f2a3b;
-  --color-field-line: #2a3648;
+  --color-field-line: #667a99;
 }
 
 @media (prefers-color-scheme: light) {
@@ -30,7 +30,7 @@
   --color-line: #d3dae5;
   --color-dim: #3f4e63;
   --color-ink: #101826;
-  --color-warn: #b45309;
+  --color-warn: #a64b08;
   --color-accent: #1d6ef2;
   --color-on-accent: #ffffff;
   --color-field: #ffffff;
@@ -44,7 +44,7 @@
   --color-line: #d3dae5;
   --color-dim: #3f4e63;
   --color-ink: #101826;
-  --color-warn: #b45309;
+  --color-warn: #a64b08;
   --color-accent: #1d6ef2;
   --color-on-accent: #ffffff;
   --color-field: #ffffff;
@@ -64,7 +64,7 @@ body {
     @apply mb-2.5 text-[13px] font-semibold uppercase tracking-wider text-dim desk:text-sm;
   }
   .iconbtn {
-    @apply inline-flex h-[42px] w-[42px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-line bg-panel text-xl leading-none text-ink active:bg-panel2;
+    @apply inline-flex h-[42px] w-[42px] flex-none cursor-pointer items-center justify-center rounded-[10px] border border-line bg-panel text-xl leading-none text-ink active:bg-panel2 disabled:cursor-default disabled:opacity-40;
   }
   .pickbtn {
     @apply h-[42px] min-w-0 cursor-pointer rounded-[10px] border border-line bg-panel2 px-2 text-sm font-semibold text-ink active:bg-line disabled:cursor-default disabled:opacity-50;
@@ -73,13 +73,13 @@ body {
     @apply bg-panel font-normal text-dim active:bg-panel2;
   }
   .v-oui {
-    background: linear-gradient(160deg, #16a34a, #0d7a36);
+    background: linear-gradient(160deg, #12873d, #0c6b2f);
   }
   .v-bof {
-    background: linear-gradient(160deg, #d97706, #a85a04);
+    background: linear-gradient(160deg, #0d8278, #095852);
   }
   .v-pluie {
-    background: linear-gradient(160deg, #3b82f6, #1e40af);
+    background: linear-gradient(160deg, #156bf4, #1e40af);
   }
   .v-inconnu {
     background: linear-gradient(160deg, #475569, #334155);

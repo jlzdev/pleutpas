@@ -16,7 +16,7 @@ const EXAMPLES = [
 
 const FEATURES = [
   {
-    title: 'Un verdict, OUI ou PLUIE',
+    title: 'Un verdict, OUI, BRUINE ou PLUIE',
     text: 'selon la pluie attendue sur la durée de ton trajet, et sinon le prochain départ au sec.',
     icon: 'M4 10.5l4 4 8-9',
   },
@@ -72,6 +72,6 @@ function pickPlace(r: GeoResult): void {
         @click="choose(e)"
       >{{ e.name }}</button>
     </div>
-    <p class="mt-4 text-xs leading-4 text-dim [text-wrap:pretty]">France métropolitaine et pays voisins. Sans compte ni inscription : le lieu reste sur cet appareil, modifiable à tout moment dans les réglages ou avec l'épingle sur la carte.</p>
+    <p class="mt-4 text-xs leading-4 text-dim [text-wrap:pretty]">France métropolitaine et pays voisins. Sans compte ni inscription : le lieu reste sur cet appareil, modifiable à tout moment en touchant son nom en haut de l'écran ou avec l'épingle sur la carte.</p>
   </section>
 </template>

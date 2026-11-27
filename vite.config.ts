@@ -38,8 +38,8 @@ export default defineConfig({
         lang: 'fr',
         start_url: '.',
         shortcuts: [
-          { name: 'Trajet 1', short_name: 'Trajet 1', description: 'Premier trajet enregistré', url: '/?fav=1' },
-          { name: 'Trajet 2', short_name: 'Trajet 2', description: 'Deuxième trajet enregistré', url: '/?fav=2' },
+          { name: 'Favori 1', short_name: 'Favori 1', description: 'Premier favori', url: '/?fav=1' },
+          { name: 'Favori 2', short_name: 'Favori 2', description: 'Deuxième favori', url: '/?fav=2' },
         ],
         display: 'standalone',
         background_color: '#0e1420',

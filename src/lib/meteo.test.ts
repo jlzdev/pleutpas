@@ -169,7 +169,7 @@ describe('séries', () => {
 
 describe('verdict', () => {
   it('sec partout : OUI sans détail quand rien n\'est prévu sur 48 h', () => {
-    expect(computeVerdict(tripOf({ mf: [mfWith(), null] }), 15, NOW, NOW)).toEqual({ state: 'oui', big: 'OUI', sub: 'Ça roule', detail: '' })
+    expect(computeVerdict(tripOf({ mf: [mfWith(), null] }), 15, NOW, NOW)).toEqual({ state: 'oui', big: 'OUI', sub: '', detail: '' })
   })
   it('sec puis pluie dans l\'après-midi : OUI, sec jusqu\'à', () => {
     const t = tripOf({ mf: [mfWith(), null], slots: [slotsWith([[360, 1]]), slotsWith()] })
@@ -180,23 +180,23 @@ describe('verdict', () => {
     expect(computeVerdict(t, 15, NOW, NOW)).toMatchObject({ state: 'pluie', sub: 'Prévue vers 8h10' })
     expect(timelineCells(t, NOW, 15).findIndex((c) => c.wet)).toBe(2)
   })
-  it('pluie faible MF maintenant : OUI orange avec prochain départ au sec', () => {
+  it('pluie faible MF maintenant : BRUINE orange avec prochain départ au sec', () => {
     const v = computeVerdict(tripOf({ mf: [mfWith(2), null] }), 15, NOW, NOW)
-    expect(v).toMatchObject({ state: 'bof', big: 'OUI', sub: 'Pluie faible en ce moment', detail: 'Sinon, prochain départ au sec : 9h05.' })
+    expect(v).toMatchObject({ state: 'bof', big: 'BRUINE', sub: 'En ce moment', detail: 'Prochain départ au sec : 9h05.' })
   })
-  it('bruine prévue : OUI orange avec son heure', () => {
+  it('bruine prévue : BRUINE orange avec son heure', () => {
     const v = computeVerdict(tripOf({ mf: [mfWith(1, { 30: 2, 35: 2 }), null] }), 60, NOW, NOW)
-    expect(v.sub).toBe('Pluie faible prévue vers 8h30')
+    expect(v.sub).toBe('Prévue vers 8h30')
     expect(v.state).toBe('bof')
   })
   it('pluie modérée MF maintenant : PLUIE', () => {
     const v = computeVerdict(tripOf({ mf: [mfWith(3), null] }), 15, NOW, NOW)
-    expect(v).toMatchObject({ state: 'pluie', big: 'PLUIE', sub: 'En ce moment', detail: 'Sinon, prochain départ au sec : 9h05.' })
+    expect(v).toMatchObject({ state: 'pluie', big: 'PLUIE', sub: 'En ce moment', detail: 'Prochain départ au sec : 9h05.' })
   })
   it('pluie prévue au-delà de l\'heure MF : dépend de la durée du trajet', () => {
     const t = tripOf({ mf: [mfWith(), null], slots: [slotsWith([[90, 2]]), slotsWith()] })
     expect(computeVerdict(t, 15, NOW, NOW)).toMatchObject({ state: 'oui', detail: 'Sec jusqu\'à 9h30 environ.' })
-    expect(computeVerdict(t, 120, NOW, NOW)).toMatchObject({ state: 'pluie', sub: 'Prévue vers 9h30', detail: 'Sinon, prochain départ au sec : 9h45.' })
+    expect(computeVerdict(t, 120, NOW, NOW)).toMatchObject({ state: 'pluie', sub: 'Prévue vers 9h30', detail: 'Prochain départ au sec : 9h45.' })
   })
   it('MF muet : la lame d\'eau radar confirmée fait foi, un parasite isolé non', () => {
     const wet: FrameSample[] = [{ time: NOW - 10 * MIN, past: true, mm: [2] }, { time: NOW - 5 * MIN, past: true, mm: [2] }]
@@ -207,7 +207,7 @@ describe('verdict', () => {
     expect(radarNowMm(glitch)).toBe(0)
     expect(radarNowMm(null)).toBeNull()
     const drizzle: FrameSample[] = [{ time: NOW - 10 * MIN, past: true, mm: [0.3] }, { time: NOW - 5 * MIN, past: true, mm: [0.3] }]
-    expect(computeVerdict(tripOf({ samples: drizzle }), 15, NOW, NOW)).toMatchObject({ state: 'bof', sub: 'Pluie faible en ce moment' })
+    expect(computeVerdict(tripOf({ samples: drizzle }), 15, NOW, NOW)).toMatchObject({ state: 'bof', big: 'BRUINE', sub: 'En ce moment' })
   })
   it('données anciennes ou absentes', () => {
     expect(computeVerdict(tripOf(), 15, NOW, NOW - 2 * HOUR_MS).sub).toBe('Données trop anciennes')
@@ -217,7 +217,7 @@ describe('verdict', () => {
   it('heure de départ choisie : le verdict se cale dessus, le radar et MF ne comptent plus', () => {
     const t = tripOf({ mf: [mfWith(3), null], slots: [slotsWith([[600, 1]]), slotsWith()] })
     const v = computeVerdict(t, 15, NOW, NOW, NOW + 10 * HOUR_MS)
-    expect(v).toMatchObject({ state: 'pluie', sub: 'Au départ', detail: 'Sinon, prochain départ au sec : 18h15.' })
+    expect(v).toMatchObject({ state: 'pluie', sub: 'Au départ', detail: 'Prochain départ au sec : 18h15.' })
     expect(computeVerdict(t, 15, NOW, NOW, NOW + 9 * HOUR_MS)).toMatchObject({ state: 'oui', detail: 'Sec jusqu\'à 18h environ.' })
     const tomorrow = computeVerdict(tripOf({ slots: [slotsWith([[24 * 60 + 420, 2]]), slotsWith()] }), 15, NOW, NOW, T8 + 24 * HOUR_MS + 410 * MIN)
     expect(tomorrow).toMatchObject({ state: 'pluie', sub: 'Prévue vers demain 15h' })
@@ -225,7 +225,7 @@ describe('verdict', () => {
   it('trajet : pluie à l\'arrivée lue dans MF de l\'arrivée, départ au sec cohérent', () => {
     const t = tripOf({ dest: true, mf: [mfWith(1), mfWith(3)] })
     const v = computeVerdict(t, 20, NOW, NOW)
-    expect(v).toMatchObject({ state: 'pluie', sub: 'Prévue vers 8h23 à l\'arrivée', detail: 'Sinon, prochain départ au sec : 8h50.' })
+    expect(v).toMatchObject({ state: 'pluie', sub: 'Prévue vers 8h23 à l\'arrivée', detail: 'Prochain départ au sec : 8h50.' })
     const cells = timelineCells(t, NOW, 20)
     expect(cells[0].wet).toBe(true)
     expect(cells.find((c) => !c.wet)?.start).toBe(T8 + 50 * MIN)

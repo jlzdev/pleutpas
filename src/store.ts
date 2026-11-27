@@ -30,13 +30,17 @@ import {
   sampleFramePoints,
   type FutureRain,
 } from './lib/api'
+import { parseHHMM } from './lib/ics'
 
 const KEY_TRIP = 'pleutpas.tripMin'
 const KEY_PLACE = 'pleutpas.place'
 const KEY_DEST = 'pleutpas.dest'
 const KEY_CACHE = 'pleutpas.cache'
 const KEY_SAVED = 'pleutpas.saved'
+const KEY_RECENTS = 'pleutpas.recents'
+const KEY_REMINDER = 'pleutpas.reminderTime'
 export const MAX_SAVED = 6
+const MAX_RECENTS = 5
 const FORECAST_TTL_MS = 15 * 60 * 1000
 
 export function lsGet(key: string): string | null {
@@ -92,6 +96,13 @@ function loadSaved(): SavedTrip[] {
   return out
 }
 
+function loadRecents(): Place[] {
+  let raw: unknown = null
+  try { raw = JSON.parse(lsGet(KEY_RECENTS) ?? '[]') } catch { /* entree corrompue */ }
+  if (!Array.isArray(raw)) return []
+  return raw.map(parsePlace).filter((p): p is Place => p !== null).slice(0, MAX_RECENTS)
+}
+
 function loadPlaces(): [Place | null, Place | null] {
   const q = new URLSearchParams(location.search)
   const keys = ['lat', 'lon', 'nom', 'alat', 'alon', 'anom', 'fav']
@@ -131,6 +142,8 @@ export const place = ref<Place | null>(initialPlace)
 export const dest = ref<Place | null>(initialDest)
 export const tripMin = ref(loadTrip())
 export const saved = ref<SavedTrip[]>(loadSaved())
+export const recents = ref<Place[]>(loadRecents())
+export const reminderTime = ref(parseHHMM(lsGet(KEY_REMINDER) ?? '') ? (lsGet(KEY_REMINDER) as string) : '08:00')
 export const forecast = ref<PointForecast | null>(null)
 export const forecastDest = ref<PointForecast | null>(null)
 export const fetchedAt = ref<number | null>(null)
@@ -314,9 +327,22 @@ function resetData(): void {
   void refresh(false)
 }
 
+function addRecent(p: Place): void {
+  recents.value = [p, ...recents.value.filter((r) => !samePlace(r, p))].slice(0, MAX_RECENTS)
+  lsSet(KEY_RECENTS, JSON.stringify(recents.value))
+}
+
+function adoptSavedTripMin(): void {
+  const s = saved.value[savedIndex.value]
+  if (s && s.tripMin !== tripMin.value) setTripMin(s.tripMin)
+}
+
 export function setPlace(p: Place): void {
   place.value = p
   lsSet(KEY_PLACE, JSON.stringify(p))
+  addRecent(p)
+  if (dest.value) setTripMin(clampTrip(estimatedTripMin(p, dest.value)))
+  adoptSavedTripMin()
   resetData()
 }
 
@@ -326,10 +352,12 @@ export function setDest(d: Place | null): void {
   dest.value = d
   if (d) {
     lsSet(KEY_DEST, JSON.stringify(d))
+    addRecent(d)
     setTripMin(clampTrip(estimatedTripMin(p, d)))
   } else {
     lsRemove(KEY_DEST)
   }
+  adoptSavedTripMin()
   resetData()
 }
 
@@ -341,15 +369,22 @@ export function swapPlaces(): void {
   dest.value = p
   lsSet(KEY_PLACE, JSON.stringify(d))
   lsSet(KEY_DEST, JSON.stringify(p))
+  adoptSavedTripMin()
   resetData()
 }
 
-const samePlace = (a: Place | null, b: Place | null): boolean => (!a && !b) || (!!a && !!b && a.lat === b.lat && a.lon === b.lon)
+export const samePlace = (a: Place | null, b: Place | null): boolean => (!a && !b) || (!!a && !!b && a.lat === b.lat && a.lon === b.lon)
 
 export const savedIndex = computed(() => saved.value.findIndex((s) => samePlace(s.place, place.value) && samePlace(s.dest, dest.value)))
 
-function persistSaved(): void {
-  lsSet(KEY_SAVED, JSON.stringify(saved.value))
+function writeSaved(list: SavedTrip[]): void {
+  saved.value = list
+  lsSet(KEY_SAVED, JSON.stringify(list))
+}
+
+function patchSaved(i: number, patch: Partial<SavedTrip>): void {
+  if (!saved.value[i]) return
+  writeSaved(saved.value.map((s, k) => (k === i ? { ...s, ...patch } : s)))
 }
 
 export const canSave = computed(() => savedIndex.value < 0 && saved.value.length < MAX_SAVED)
@@ -358,14 +393,59 @@ export function saveCurrent(name: string): boolean {
   const p = place.value
   if (!p || !canSave.value) return false
   const entry: SavedTrip = { name: cleanName(name) || routeLabel(p, dest.value), place: p, dest: dest.value, tripMin: tripMin.value }
-  saved.value = [...saved.value, entry]
-  persistSaved()
+  writeSaved([...saved.value, entry])
   return true
 }
 
 export function removeSaved(i: number): void {
-  saved.value = saved.value.filter((_, k) => k !== i)
-  persistSaved()
+  writeSaved(saved.value.filter((_, k) => k !== i))
+}
+
+export function insertSaved(i: number, s: SavedTrip): boolean {
+  if (saved.value.length >= MAX_SAVED) return false
+  if (saved.value.some((x) => samePlace(x.place, s.place) && samePlace(x.dest, s.dest))) return false
+  const list = [...saved.value]
+  list.splice(Math.min(i, list.length), 0, s)
+  writeSaved(list)
+  return true
+}
+
+export function renameSaved(i: number, name: string): void {
+  const s = saved.value[i]
+  if (s) patchSaved(i, { name: cleanName(name) || routeLabel(s.place, s.dest) })
+}
+
+export function setSavedTripMin(i: number, n: number): void {
+  const v = clampTrip(n)
+  if (i === savedIndex.value) setTripMin(v)
+  patchSaved(i, { tripMin: v })
+}
+
+export function moveSavedUp(i: number): void {
+  if (i < 1 || i >= saved.value.length) return
+  const list = [...saved.value]
+  ;[list[i - 1], list[i]] = [list[i], list[i - 1]]
+  writeSaved(list)
+}
+
+export function replaceSavedWithCurrent(i: number): void {
+  const p = place.value
+  const s = saved.value[i]
+  if (!p || !s || savedIndex.value >= 0) return
+  const autoNamed = s.name === routeLabel(s.place, s.dest)
+  patchSaved(i, { place: p, dest: dest.value, tripMin: tripMin.value, ...(autoNamed ? { name: routeLabel(p, dest.value) } : {}) })
+}
+
+export function setTripMinByUser(n: number): void {
+  const v = clampTrip(n)
+  setTripMin(v)
+  if (savedIndex.value >= 0) patchSaved(savedIndex.value, { tripMin: v })
+}
+
+export function setReminderTime(v: string): void {
+  if (!parseHHMM(v)) return
+  reminderTime.value = v
+  lsSet(KEY_REMINDER, v)
 }
 
 export function applySaved(i: number): void {
@@ -391,7 +471,6 @@ export function setTripMin(n: number): void {
 
 export function initStore(): void {
   lsRemove('pleutpas.basemap')
-  lsRemove('pleutpas.reminderTime')
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible' || !place.value) return
     if (fetchedAt.value === null || Date.now() - fetchedAt.value > 5 * 60 * 1000) {
@@ -409,6 +488,6 @@ declare global {
 }
 window.__pp = {
   place, dest, tripMin, forecast, forecastDest, fetchedAt, rainMF, rainMFDest, forecastMF, forecastMFDest,
-  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs, forecastAt, saved, savedIndex, canSave,
+  frameSamples, radarPending, refreshing, futureRain, slots, slotsDest, trip, nowTick, displayZone, departAt, refMs, forecastAt, saved, savedIndex, canSave, recents,
   refresh, setPlace, setDest, swapPlaces, setDepartAt, saveCurrent, applySaved, removeSaved, isMfPointUsable, hourlyEndMs,
 }
