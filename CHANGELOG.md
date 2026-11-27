@@ -6,6 +6,12 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.15.1] - 2026-11-27
+
+### Améliorations
+
+- Partage du site : l'aperçu du lien sur LinkedIn, WhatsApp, Slack ou X est une grande image (1200 x 630, logo, "Je peux rouler ?" et les trois verdicts OUI / BRUINE / PLUIE) à la place de la petite vignette de l'icône. L'image est la même pour tous les liens, elle ne montre pas le verdict du moment. Sa source est `scripts/og-image.html`.
+
 ## [1.15.0] - 2026-11-27
 
 ### Améliorations

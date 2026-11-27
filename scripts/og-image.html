@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1200px; height: 630px; overflow: hidden; }
+  body {
+    background: radial-gradient(1100px 620px at 78% 8%, #1a2740 0%, #0e1420 62%);
+    color: #e8edf5;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 34px;
+  }
+  .brand { display: flex; align-items: center; gap: 20px; }
+  .brand svg { width: 76px; height: 90px; display: block; }
+  .brand span { font-size: 46px; font-weight: 700; letter-spacing: -0.5px; color: #c3cee0; }
+  h1 { font-size: 112px; line-height: 1; font-weight: 800; letter-spacing: -3px; color: #fff; }
+  .states { display: flex; gap: 22px; }
+  .state {
+    width: 268px; height: 112px; border-radius: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 52px; font-weight: 800; letter-spacing: -1px; color: #fff;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  }
+  .oui { background: linear-gradient(160deg, #12873d, #0c6b2f); }
+  .bof { background: linear-gradient(160deg, #0d8278, #095852); }
+  .pluie { background: linear-gradient(160deg, #156bf4, #1e40af); }
+  p { font-size: 34px; font-weight: 500; color: #aebbd0; }
+  p b { color: #fff; font-weight: 700; }
+</style>
+</head>
+<body>
+  <div class="brand">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="112 92 288 340">
+      <defs>
+        <linearGradient id="drop" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#6ee7dc"/>
+          <stop offset="1" stop-color="#4aa8ff"/>
+        </linearGradient>
+      </defs>
+      <path d="M256 104 C 256 164 150 240 150 312 a 106 106 0 0 0 212 0 C 362 240 256 164 256 104 Z" fill="url(#drop)"/>
+      <path d="M212 356 C 219 375 233 388 251 394" fill="none" stroke="#ffffff" stroke-opacity="0.25" stroke-width="18" stroke-linecap="round"/>
+      <line x1="140" y1="372" x2="372" y2="140" stroke="#0e1420" stroke-width="60" stroke-linecap="round"/>
+      <line x1="140" y1="372" x2="372" y2="140" stroke="#ff5c47" stroke-width="34" stroke-linecap="round"/>
+    </svg>
+    <span>Pleut pas ?</span>
+  </div>
+  <h1>Je peux rouler ?</h1>
+  <div class="states">
+    <div class="state oui">OUI</div>
+    <div class="state bof">BRUINE</div>
+    <div class="state pluie">PLUIE</div>
+  </div>
+  <p>Le verdict pluie avant de partir, sur <b>pleutpas.fr</b></p>
+</body>
+</html>
