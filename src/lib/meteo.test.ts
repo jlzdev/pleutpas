@@ -296,7 +296,7 @@ describe('hiver', () => {
   it('risque de verglas selon le pourcentage', () => {
     const hz = (pct: number) => [{ start: T8 - HOUR_MS, end: T8 + 2 * HOUR_MS, freezingPct: pct }]
     expect(winterAt(fc([], hz(20)), NOW)).toBeNull()
-    expect(fmtWinter(winterAt(fc([], hz(45)), NOW)!, NOW)).toEqual({ text: 'Risque de verglas 45 % (Météo-France).', strong: false })
+    expect(fmtWinter(winterAt(fc([], hz(45)), NOW)!, NOW)).toEqual({ text: 'Risque de verglas 45 %.', strong: false })
     expect(fmtWinter(winterAt(fc([], hz(70)), NOW)!, NOW).strong).toBe(true)
   })
   it('heure de départ choisie : la fenêtre hiver suit le départ', () => {

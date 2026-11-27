@@ -387,7 +387,7 @@ function worseWinter(a: WinterInfo, b: WinterInfo): boolean {
 
 export function fmtWinter(w: WinterInfo, nowMs: number, where = ''): InfoText {
   if (w.kind === 'risque') {
-    return { text: 'Risque de verglas' + where + ' ' + Math.round(w.pct) + ' % (Météo-France).', strong: w.pct >= FREEZING_STRONG_PCT }
+    return { text: 'Risque de verglas' + where + ' ' + Math.round(w.pct) + ' %.', strong: w.pct >= FREEZING_STRONG_PCT }
   }
   const word = w.kind === 'verglacant' ? 'Pluie verglaçante' : 'Neige'
   const when = w.now && w.time <= nowMs + STEP_5MIN_MS ? ' en ce moment' : ' vers ' + fmtDayHM(w.time, nowMs)

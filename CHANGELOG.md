@@ -6,6 +6,12 @@ Les changements notables du site sont consignés ici. Les versions suivent le pr
 
 ## [Non publié]
 
+## [1.14.2] - 2026-11-27
+
+### Améliorations
+
+- Sous le verdict, le risque de verglas s'écrit "Risque de verglas 70 %." sans la mention "(Météo-France)", la source étant déjà celle de toute la page.
+
 ## [1.14.1] - 2026-11-20
 
 ### Améliorations
